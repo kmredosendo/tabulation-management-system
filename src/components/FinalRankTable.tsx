@@ -146,7 +146,7 @@ export const FinalRankTable: React.FC<FinalRankTableProps> = ({ eventId, phase =
   };
 
   // Function to get eligible contestants for the current phase
-  const getEligibleContestants = (allContestants: Contestant[], allScores: RawScore[], targetPhase: string) => {
+  const getEligibleContestants = (allContestants: Contestant[], targetPhase: string) => {
     // If contest has only one phase, all contestants are eligible
     if (!eventSettings?.hasTwoPhases) {
       return allContestants;
@@ -156,32 +156,14 @@ export const FinalRankTable: React.FC<FinalRankTableProps> = ({ eventId, phase =
       return allContestants;
     }
 
-    // For FINAL phase, only include preliminary finalists
-    const prelimScores = allScores; // Include all scores for preliminary ranking
-    const prelimContestants = allContestants;
-
-    if (!eventSettings?.separateGenders) {
-      // Unified judging - take top N overall
-      const rankings = calculateRankings(prelimContestants, prelimScores, judges, criteria);
-      return rankings.slice(0, eventSettings?.finalistsCount || 5).map(r => r.contestant);
-    } else {
-      // Separate genders - take top N per gender
-      const maleContestants = prelimContestants.filter(c => c.sex === "MALE");
-      const femaleContestants = prelimContestants.filter(c => c.sex === "FEMALE");
-      
-      const maleRankings = calculateRankings(maleContestants, prelimScores, judges, criteria);
-      const femaleRankings = calculateRankings(femaleContestants, prelimScores, judges, criteria);
-      
-      const finalistsCount = eventSettings?.finalistsCount || 5;
-      const maleFinalists = maleRankings.slice(0, finalistsCount).map(r => r.contestant);
-      const femaleFinalists = femaleRankings.slice(0, finalistsCount).map(r => r.contestant);
-      
-      return [...maleFinalists, ...femaleFinalists];
-    }
+    // For FINAL phase, only include contestants who actually have final scores
+    // This follows the "back to zero" scoring principle where only finalists are scored in final phase
+    const contestantsWithFinalScores = new Set(scores.map(s => s.contestantId));
+    return allContestants.filter(c => contestantsWithFinalScores.has(c.id));
   };
 
   // Get eligible contestants for this phase
-  const eligibleContestants = getEligibleContestants(contestants, scores, phase);
+  const eligibleContestants = getEligibleContestants(contestants, phase);
   const eligibleContestantIds = new Set(eligibleContestants.map(c => c.id));
   
   // Filter scores to only include eligible contestants
@@ -197,8 +179,12 @@ export const FinalRankTable: React.FC<FinalRankTableProps> = ({ eventId, phase =
     const maleContestants = eligibleContestants.filter(c => c.sex === "MALE");
     const femaleContestants = eligibleContestants.filter(c => c.sex === "FEMALE");
     
-    maleRankings = calculateRankings(maleContestants, filteredScores, judges, criteria);
-    femaleRankings = calculateRankings(femaleContestants, filteredScores, judges, criteria);
+    // Filter scores by gender as well
+    const maleScores = filteredScores.filter(s => maleContestants.some(mc => mc.id === s.contestantId));
+    const femaleScores = filteredScores.filter(s => femaleContestants.some(fc => fc.id === s.contestantId));
+    
+    maleRankings = calculateRankings(maleContestants, maleScores, judges, criteria);
+    femaleRankings = calculateRankings(femaleContestants, femaleScores, judges, criteria);
     rankings = null; // We'll render separate tables
   } else {
     // Unified rankings
