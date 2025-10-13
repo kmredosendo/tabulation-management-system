@@ -105,7 +105,7 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
   };
 
   // Function to get eligible contestants for the current phase
-  const getEligibleContestants = (allContestants: Contestant[], allScores: RawScore[], targetPhase: string) => {
+  const getEligibleContestants = (allContestants: Contestant[], targetPhase: string) => {
     // If contest has only one phase, all contestants are eligible
     if (!eventSettings?.hasTwoPhases) {
       return allContestants;
@@ -115,111 +115,18 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
       return allContestants;
     }
 
-    // For FINAL phase, only include preliminary finalists
-    const prelimScores = allScores; // Include all scores for preliminary ranking
-    const prelimContestants = allContestants;
-
-    if (!eventSettings?.separateGenders) {
-      // Unified judging - take top N overall
-      const rankings = calculateRankings(prelimContestants, prelimScores, judges, criteria);
-      // Get top contestants by averaging their ranks across judges
-      const contestantAvgRanks: Record<number, number> = {};
-      prelimContestants.forEach(c => {
-        let totalRank = 0;
-        let judgeCount = 0;
-        judges.forEach(j => {
-          if (rankings[j.id]?.[c.id]) {
-            totalRank += rankings[j.id][c.id];
-            judgeCount++;
-          }
-        });
-        contestantAvgRanks[c.id] = judgeCount > 0 ? totalRank / judgeCount : Infinity;
-      });
-      
-      const sortedContestants = prelimContestants
-        .sort((a, b) => contestantAvgRanks[a.id] - contestantAvgRanks[b.id])
-        .slice(0, eventSettings?.finalistsCount || 5);
-      return sortedContestants;
-    } else {
-      // Separate genders - take top N per gender
-      const maleContestants = prelimContestants.filter(c => c.sex === "MALE");
-      const femaleContestants = prelimContestants.filter(c => c.sex === "FEMALE");
-      
-      const maleRankings = calculateRankings(maleContestants, prelimScores, judges, criteria);
-      const femaleRankings = calculateRankings(femaleContestants, prelimScores, judges, criteria);
-      
-      const contestantAvgRanks = (contestantGroup: Contestant[], rankings: Record<number, Record<number, number>>) => {
-        const avgRanks: Record<number, number> = {};
-        contestantGroup.forEach(c => {
-          let totalRank = 0;
-          let judgeCount = 0;
-          judges.forEach(j => {
-            if (rankings[j.id]?.[c.id]) {
-              totalRank += rankings[j.id][c.id];
-              judgeCount++;
-            }
-          });
-          avgRanks[c.id] = judgeCount > 0 ? totalRank / judgeCount : Infinity;
-        });
-        return avgRanks;
-      };
-      
-      const maleAvgRanks = contestantAvgRanks(maleContestants, maleRankings);
-      const femaleAvgRanks = contestantAvgRanks(femaleContestants, femaleRankings);
-      
-      const finalistsCount = eventSettings?.finalistsCount || 5;
-      const maleFinalists = maleContestants
-        .sort((a, b) => maleAvgRanks[a.id] - maleAvgRanks[b.id])
-        .slice(0, finalistsCount);
-      const femaleFinalists = femaleContestants
-        .sort((a, b) => femaleAvgRanks[a.id] - femaleAvgRanks[b.id])
-        .slice(0, finalistsCount);
-      
-      return [...maleFinalists, ...femaleFinalists];
-    }
+    // For FINAL phase, only include contestants who actually have final scores
+    // This follows the "back to zero" scoring principle where only finalists are scored in final phase
+    const contestantsWithFinalScores = new Set(scores.map(s => s.contestantId));
+    return allContestants.filter(c => contestantsWithFinalScores.has(c.id));
   };
 
   // Get eligible contestants for this phase
-  const eligibleContestants = getEligibleContestants(contestants, scores, phase);
+  const eligibleContestants = getEligibleContestants(contestants, phase);
   const eligibleContestantIds = new Set(eligibleContestants.map(c => c.id));
   
   // Filter scores to only include eligible contestants
   const filteredScores = scores.filter(s => eligibleContestantIds.has(s.contestantId));
-
-  // Only use sub-criteria (criteria with parentId)
-  const subCriteriaIds = criteria.filter((c) => c.parentId).map((c) => c.id);
-
-  // For each judge and contestant, sum all sub-criteria scores
-  const judgeScores: Record<number, { contestantId: number; value: number }[]> = {};
-  judges.forEach((judge) => {
-    judgeScores[judge.id] = eligibleContestants.map((c) => {
-      const total = filteredScores
-        .filter((s) => s.judgeId === judge.id && s.contestantId === c.id && subCriteriaIds.includes(s.criteriaId))
-        .reduce((sum, s) => sum + s.value, 0);
-      return { contestantId: c.id, value: total };
-    });
-  });
-
-  // For each judge, compute ranks (dense ranking)
-  const judgeRanks: Record<number, Record<number, number>> = {};
-  judges.forEach((judge) => {
-    const arr = [...judgeScores[judge.id]];
-    arr.sort((a, b) => b.value - a.value);
-    let rank = 1;
-    for (let i = 0; i < arr.length; ) {
-      const tieValue = arr[i].value;
-      let tieEnd = i;
-      while (tieEnd + 1 < arr.length && arr[tieEnd + 1].value === tieValue) {
-        tieEnd++;
-      }
-      for (let j = i; j <= tieEnd; j++) {
-        if (!judgeRanks[judge.id]) judgeRanks[judge.id] = {};
-        judgeRanks[judge.id][arr[j].contestantId] = rank;
-      }
-      rank += (tieEnd - i + 1);
-      i = tieEnd + 1;
-    }
-  });
 
   // For each contestant, sum their ranks across all judges
   let contestantRows;
@@ -227,12 +134,19 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
   let femaleContestantRows;
   
   if (eventSettings?.separateGenders) {
-    // Separate by gender
+    // Separate by gender - calculate ranks within each gender group
     const maleContestants = eligibleContestants.filter(c => c.sex === "MALE");
     const femaleContestants = eligibleContestants.filter(c => c.sex === "FEMALE");
     
+    const maleScores = filteredScores.filter(s => maleContestants.some(mc => mc.id === s.contestantId));
+    const femaleScores = filteredScores.filter(s => femaleContestants.some(fc => fc.id === s.contestantId));
+    
+    // Calculate rankings separately for each gender
+    const maleRankings = calculateRankings(maleContestants, maleScores, judges, criteria);
+    const femaleRankings = calculateRankings(femaleContestants, femaleScores, judges, criteria);
+    
     maleContestantRows = maleContestants.map((c) => {
-      const ranks = judges.map((j) => judgeRanks[j.id]?.[c.id] ?? "");
+      const ranks = judges.map((j) => maleRankings[j.id]?.[c.id] ?? "");
       const totalRank = ranks.reduce((sum, r) => sum + (typeof r === "number" ? r : 0), 0);
       return {
         id: c.id,
@@ -244,7 +158,7 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
     });
     
     femaleContestantRows = femaleContestants.map((c) => {
-      const ranks = judges.map((j) => judgeRanks[j.id]?.[c.id] ?? "");
+      const ranks = judges.map((j) => femaleRankings[j.id]?.[c.id] ?? "");
       const totalRank = ranks.reduce((sum, r) => sum + (typeof r === "number" ? r : 0), 0);
       return {
         id: c.id,
@@ -257,9 +171,11 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
     
     contestantRows = null;
   } else {
-    // Unified
+    // Unified - calculate ranks for all contestants together
+    const rankings = calculateRankings(eligibleContestants, filteredScores, judges, criteria);
+    
     contestantRows = eligibleContestants.map((c) => {
-      const ranks = judges.map((j) => judgeRanks[j.id]?.[c.id] ?? "");
+      const ranks = judges.map((j) => rankings[j.id]?.[c.id] ?? "");
       const totalRank = ranks.reduce((sum, r) => sum + (typeof r === "number" ? r : 0), 0);
       return {
         id: c.id,
