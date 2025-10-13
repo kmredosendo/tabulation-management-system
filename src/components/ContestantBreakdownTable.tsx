@@ -99,7 +99,7 @@ export const ContestantBreakdownTable: React.FC<ContestantBreakdownTableProps> =
   };
 
   // Function to get eligible contestants for the current phase
-  const getEligibleContestants = (allContestants: Contestant[], allScores: RawScore[], targetPhase: string) => {
+  const getEligibleContestants = (allContestants: Contestant[], targetPhase: string) => {
     // If contest has only one phase, all contestants are eligible
     if (!eventSettings?.hasTwoPhases) {
       return allContestants;
@@ -109,76 +109,14 @@ export const ContestantBreakdownTable: React.FC<ContestantBreakdownTableProps> =
       return allContestants;
     }
 
-    // For FINAL phase, only include preliminary finalists
-    const prelimScores = allScores; // Include all scores for preliminary ranking
-    const prelimContestants = allContestants;
-
-    // Get judges from scores
-    const judges = [...new Set(allScores.map(s => ({ id: s.judgeId, name: s.judgeName, number: s.judgeNumber })))];
-    const prelimCriteria = criteria; // Use the actual criteria from component state
-
-    if (!eventSettings?.separateGenders) {
-      // Unified judging - take top N overall
-      const rankings = calculateRankings(prelimContestants, prelimScores, judges, prelimCriteria);
-      // Get top contestants by averaging their ranks across judges
-      const contestantAvgRanks: Record<number, number> = {};
-      prelimContestants.forEach(c => {
-        let totalRank = 0;
-        let judgeCount = 0;
-        judges.forEach(j => {
-          if (rankings[j.id]?.[c.id]) {
-            totalRank += rankings[j.id][c.id];
-            judgeCount++;
-          }
-        });
-        contestantAvgRanks[c.id] = judgeCount > 0 ? totalRank / judgeCount : Infinity;
-      });
-      
-      const sortedContestants = prelimContestants
-        .sort((a, b) => contestantAvgRanks[a.id] - contestantAvgRanks[b.id])
-        .slice(0, eventSettings?.finalistsCount || 5);
-      return sortedContestants;
-    } else {
-      // Separate genders - take top N per gender
-      const maleContestants = prelimContestants.filter(c => c.sex === "MALE");
-      const femaleContestants = prelimContestants.filter(c => c.sex === "FEMALE");
-      
-      const maleRankings = calculateRankings(maleContestants, prelimScores, judges, prelimCriteria);
-      const femaleRankings = calculateRankings(femaleContestants, prelimScores, judges, prelimCriteria);
-      
-      const contestantAvgRanks = (contestantGroup: Contestant[], rankings: Record<number, Record<number, number>>) => {
-        const avgRanks: Record<number, number> = {};
-        contestantGroup.forEach(c => {
-          let totalRank = 0;
-          let judgeCount = 0;
-          judges.forEach(j => {
-            if (rankings[j.id]?.[c.id]) {
-              totalRank += rankings[j.id][c.id];
-              judgeCount++;
-            }
-          });
-          avgRanks[c.id] = judgeCount > 0 ? totalRank / judgeCount : Infinity;
-        });
-        return avgRanks;
-      };
-      
-      const maleAvgRanks = contestantAvgRanks(maleContestants, maleRankings);
-      const femaleAvgRanks = contestantAvgRanks(femaleContestants, femaleRankings);
-      
-      const finalistsCount = eventSettings?.finalistsCount || 5;
-      const maleFinalists = maleContestants
-        .sort((a, b) => maleAvgRanks[a.id] - maleAvgRanks[b.id])
-        .slice(0, finalistsCount);
-      const femaleFinalists = femaleContestants
-        .sort((a, b) => femaleAvgRanks[a.id] - femaleAvgRanks[b.id])
-        .slice(0, finalistsCount);
-      
-      return [...maleFinalists, ...femaleFinalists];
-    }
+    // For FINAL phase, only include contestants who actually have final scores
+    // This follows the "back to zero" scoring principle where only finalists are scored in final phase
+    const contestantsWithFinalScores = new Set(scores.map(s => s.contestantId));
+    return allContestants.filter(c => contestantsWithFinalScores.has(c.id));
   };
 
   // Get eligible contestants for this phase
-  const eligibleContestants = getEligibleContestants(contestants, scores, phase);
+  const eligibleContestants = getEligibleContestants(contestants, phase);
   const eligibleContestantIds = new Set(eligibleContestants.map(c => c.id));
   
   // Filter scores to only include eligible contestants
