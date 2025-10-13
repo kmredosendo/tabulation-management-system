@@ -1,0 +1,609 @@
+"use client";
+import { getApiUrl } from "@/lib/api";
+
+import "../score-shake.css";
+
+import { useEffect, useState, useCallback } from "react";
+import { connectJudgeSocket, disconnectJudgeSocket, joinEventRoom } from "@/lib/judgeSocket";
+import { useParams } from "next/navigation";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { Moon, Sun } from "lucide-react";
+
+interface Contestant {
+  id: number;
+  number: number;
+  name: string;
+  sex?: string;
+}
+
+interface Criteria {
+  id: number;
+  name: string;
+  subCriterias: SubCriteria[];
+}
+
+interface SubCriteria {
+  id: number;
+  name: string;
+  weight: number;
+  autoAssignToAllContestants: boolean;
+}
+
+interface Score {
+  contestantId: number;
+  value: number;
+}
+
+export default function JudgeScorePage() {
+  const params = useParams();
+  const judgeId = params?.id;
+  const [event, setEvent] = useState<{ id: number; name: string; currentPhase: string; separateGenders: boolean; hasTwoPhases: boolean; finalistsCount: number | null } | null>(null);
+  const [judge, setJudge] = useState<{ id: number; name: string; number: number; lockedPreliminary: boolean; lockedFinal: boolean } | null>(null);
+  const [contestants, setContestants] = useState<Contestant[]>([]);
+  const [filteredContestants, setFilteredContestants] = useState<Contestant[]>([]);
+  const [criteria, setCriteria] = useState<Criteria[]>([]);
+  const [scores, setScores] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Theme toggle function
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('judge-theme', newTheme);
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+  };
+
+  // Load theme from localStorage on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('judge-theme') as 'light' | 'dark' | null;
+    const initialTheme = savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    setTheme(initialTheme);
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+  }, []);
+
+  // Function to determine finalists based on preliminary scores
+  const determineFinalists = useCallback(async (eventId: number, finalistsCount: number, separateGenders: boolean, allContestants: Contestant[]) => {
+    try {
+      // Fetch preliminary scores
+      const prelimScoresRes = await fetch(getApiUrl(`/api/raw-scores?eventId=${eventId}&phase=PRELIMINARY`));
+      const prelimData = await prelimScoresRes.json();
+
+      if (!prelimData.scores || prelimData.scores.length === 0) {
+        // No preliminary scores, show all contestants
+        return allContestants;
+      }
+
+      // Calculate average scores per contestant
+      const contestantScores: Record<number, { total: number; count: number; contestant: Contestant }> = {};
+
+      prelimData.scores.forEach((score: Score) => {
+        if (!contestantScores[score.contestantId]) {
+          const contestant = allContestants.find((c: Contestant) => c.id === score.contestantId);
+          if (contestant) {
+            contestantScores[score.contestantId] = { total: 0, count: 0, contestant };
+          }
+        }
+        if (contestantScores[score.contestantId]) {
+          contestantScores[score.contestantId].total += score.value;
+          contestantScores[score.contestantId].count += 1;
+        }
+      });
+
+      // Calculate averages
+      const averages = Object.entries(contestantScores).map(([id, data]) => ({
+        id: parseInt(id),
+        average: data.total / data.count,
+        contestant: data.contestant
+      }));
+
+      if (separateGenders) {
+        // Separate by gender
+        const maleContestants = averages.filter(avg => avg.contestant.sex === 'MALE');
+        const femaleContestants = averages.filter(avg => avg.contestant.sex === 'FEMALE');
+
+        // Sort and get top finalists for each gender
+        const topMales = maleContestants
+          .sort((a, b) => b.average - a.average)
+          .slice(0, finalistsCount)
+          .map(avg => avg.contestant);
+
+        const topFemales = femaleContestants
+          .sort((a, b) => b.average - a.average)
+          .slice(0, finalistsCount)
+          .map(avg => avg.contestant);
+
+        return [...topMales, ...topFemales];
+      } else {
+        // Overall top finalists
+        return averages
+          .sort((a, b) => b.average - a.average)
+          .slice(0, finalistsCount)
+          .map(avg => avg.contestant);
+      }
+    } catch (error) {
+      console.error('Error determining finalists:', error);
+      return allContestants; // Fallback to all contestants
+    }
+  }, []);
+
+  useEffect(() => {
+    async function fetchData() {
+      // First fetch the judge to get eventId
+      const judgeRes = await fetch(getApiUrl(`/api/admin/judges`));
+      const judgeData = await judgeRes.json();
+      const foundJudge = judgeData.find((j: { id: number }) => j.id.toString() === judgeId);
+      if (!foundJudge) return;
+      setJudge(foundJudge);
+
+      // Fetch the event for this judge
+      const eventRes = await fetch(getApiUrl(`/api/admin/events/active?eventId=${foundJudge.eventId}`));
+      const eventData = await eventRes.json();
+      if (!eventData.length) return;
+      setEvent(eventData[0]);
+
+      const contestantsRes = await fetch(getApiUrl(`/api/admin/contestants?eventId=${foundJudge.eventId}`));
+      const allContestants = await contestantsRes.json();
+      setContestants(allContestants);
+
+      // Apply finalist filtering if in final phase and conditions are met
+      if (eventData[0].currentPhase === 'FINAL' && eventData[0].hasTwoPhases && eventData[0].finalistsCount) {
+        const finalists = await determineFinalists(foundJudge.eventId, eventData[0].finalistsCount, eventData[0].separateGenders, allContestants);
+        setFilteredContestants(finalists);
+      } else {
+        setFilteredContestants(allContestants);
+      }
+
+      const criteriaRes = await fetch(getApiUrl(`/api/admin/criteria?eventId=${foundJudge.eventId}&phase=${eventData[0]?.currentPhase || 'PRELIMINARY'}`));
+      setCriteria(await criteriaRes.json());
+      setLoading(false);
+    }
+    if (judgeId) {
+      fetchData();
+      // Ensure judgeId is string or number, not array
+      const id = Array.isArray(judgeId) ? judgeId[0] : judgeId;
+      connectJudgeSocket(id);
+    }
+    // On unmount, disconnect socket
+    return () => {
+      disconnectJudgeSocket();
+    };
+  }, [judgeId, determineFinalists]);
+
+  // Join event room and listen for phase changes when event is loaded
+  useEffect(() => {
+    if (!event?.id || !judgeId) return;
+
+    console.log("Setting up socket for judge:", judgeId, "event:", event.id);
+    const socket = connectJudgeSocket(Array.isArray(judgeId) ? judgeId[0] : judgeId);
+    joinEventRoom(event.id);
+
+    const handlePhaseChanged = (data: { currentPhase: string }) => {
+      console.log("Phase changed event received:", data);
+      setEvent(prev => prev ? { ...prev, currentPhase: data.currentPhase } : null);
+    };
+
+    const handleJudgeLockChanged = (data: { judgeId: number; phase: string; locked: boolean }) => {
+      console.log("Judge lock changed event received:", data);
+      // Only update if this event is for the current judge
+      if (judgeId && parseInt(judgeId.toString()) === data.judgeId) {
+        const fieldName = data.phase === 'PRELIMINARY' ? 'lockedPreliminary' : 'lockedFinal';
+        setJudge(prev => prev ? { ...prev, [fieldName]: data.locked } : null);
+      }
+    };
+
+    socket.on('phase-changed', handlePhaseChanged);
+    socket.on('judge-lock-changed', handleJudgeLockChanged);
+
+    return () => {
+      console.log("Cleaning up socket listeners");
+      socket.off('phase-changed', handlePhaseChanged);
+      socket.off('judge-lock-changed', handleJudgeLockChanged);
+    };
+  }, [event?.id, judgeId]);
+
+  // Refetch criteria when phase changes
+  useEffect(() => {
+    async function fetchCriteria() {
+      if (!event?.id) return;
+      const criteriaRes = await fetch(getApiUrl(`/api/admin/criteria?eventId=${event.id}&phase=${event.currentPhase}`));
+      setCriteria(await criteriaRes.json());
+    }
+    fetchCriteria();
+  }, [event?.currentPhase, event?.id]);
+
+  // Update filtered contestants when event changes
+  useEffect(() => {
+    if (!event || !contestants.length) return;
+
+    if (event.currentPhase === 'FINAL' && event.hasTwoPhases && event.finalistsCount) {
+      determineFinalists(event.id, event.finalistsCount, event.separateGenders, contestants)
+        .then(finalists => setFilteredContestants(finalists));
+    } else {
+      setFilteredContestants(contestants);
+    }
+  }, [event, contestants, determineFinalists]);
+
+  // Fetch and prefill existing scores for this judge/event
+  useEffect(() => {
+    async function fetchScores() {
+      if (!judgeId || !event?.id) return;
+      const res = await fetch(getApiUrl(`/api/score?judgeId=${judgeId}&eventId=${event.id}&phase=${event.currentPhase}`));
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const prefill: Record<string, string> = {};
+        data.forEach((s: { contestantId: number; criteriaId: number; value: number }) => {
+          prefill[`${s.contestantId}_${s.criteriaId}`] = s.value.toString();
+        });
+        setScores(prefill);
+      }
+    }
+    fetchScores();
+    // Only run when judgeId, event, or phase changes
+  }, [judgeId, event?.id, event?.currentPhase]);
+
+  // Auto set value for auto sub-criteria
+  useEffect(() => {
+    // Only run after contestants and criteria are loaded
+    if (contestants.length && criteria.length) {
+      const autoScores: Record<string, string> = {};
+      criteria.forEach(main => {
+        main.subCriterias.forEach(sub => {
+          if (sub.autoAssignToAllContestants) {
+            contestants.forEach(contestant => {
+              // For now, set to sub.weight as a default (can be changed as needed)
+              autoScores[`${contestant.id}_${sub.id}`] = sub.weight.toString();
+            });
+          }
+        });
+      });
+      setScores(prev => ({ ...autoScores, ...prev }));
+    }
+  }, [contestants, criteria]);
+
+  // Local storage key for autosave
+  const localStorageKey = event && judge ? `score-autosave-event-${event.id}-judge-${judge.id}` : null;
+
+  // Load autosaved scores from localStorage on mount or when event/judge changes
+  useEffect(() => {
+    if (!localStorageKey) return;
+    const saved = localStorage.getItem(localStorageKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          setScores(prev => ({ ...prev, ...parsed }));
+        }
+      } catch { }
+    }
+  }, [localStorageKey]);
+
+  // Autosave scores to localStorage whenever they change
+  useEffect(() => {
+    if (!localStorageKey) return;
+    localStorage.setItem(localStorageKey, JSON.stringify(scores));
+  }, [scores, localStorageKey]);
+
+  // Clear autosave on successful submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: { contestantId: number; subCriteriaId: number; value: number }[] = [];
+    mainGroups.forEach(main => {
+      main.subCriterias.forEach(sub => {
+        contestants.forEach(contestant => {
+          // Only include scores for visible contestants and sub-criteria
+          const val = scores[`${contestant.id}_${sub.id}`];
+          if (val !== undefined && val !== "") {
+            payload.push({
+              contestantId: contestant.id,
+              subCriteriaId: sub.id,
+              value: parseFloat(val),
+            });
+          }
+        });
+      });
+    });
+    // Only send the current payload (visible/active scores)
+    const res = await fetch(getApiUrl("/api/score"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        judgeId,
+        eventId: event?.id,
+        scores: payload,
+        phase: event?.currentPhase,
+      }),
+    });
+    if (res.ok) {
+      if (localStorageKey) localStorage.removeItem(localStorageKey);
+      toast.success("Scores submitted!");
+    } else {
+      toast.error("Failed to submit scores");
+    }
+  };
+
+  // Remove unused allSubCriterias and fix variable scoping
+  // mainGroups and contestants are defined in the render scope
+  // Move mainGroups definition inside the render function
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+  if (!event || !judge || !criteria.length || !contestants.length) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  // Group sub-criteria by main criteria for table columns
+  const mainGroups = criteria.map(main => ({
+    id: main.id,
+    name: main.name,
+    totalWeight: main.subCriterias.reduce((sum, s) => sum + (s.weight || 0), 0),
+    subCriterias: main.subCriterias,
+  }));
+
+  // Add back handleScoreChange for input fields
+  const handleScoreChange = (contestantId: number, subCriteriaId: number, value: string) => {
+    setScores(prev => ({ ...prev, [`${contestantId}_${subCriteriaId}`]: value }));
+  };
+
+  // Helper function to get current lock status
+  const isJudgeLocked = () => {
+    if (!judge || !event) return false;
+    return event.currentPhase === 'PRELIMINARY' ? judge.lockedPreliminary : judge.lockedFinal;
+  };
+
+  // Logout handler
+  const handleLogout = async () => {
+    if (judgeId) {
+      await fetch(getApiUrl(`/api/admin/judges/${judgeId}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+      window.location.href = basePath + "/";
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-background p-2">
+      <Card className="w-full max-w-7xl mx-auto p-4 flex flex-col gap-1 shadow-xl overflow-x-auto h-[95vh]">
+        <div className="flex flex-row items-start justify-between w-full mb-4">
+          <div className="flex-1 text-left text-base text-muted-foreground font-medium">
+            Judge: <span className="text-primary font-semibold">{judge?.name}</span>
+          </div>
+          <div className="flex-2 flex justify-center">
+            <div className="text-center">
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary mb-2">
+                {event.name}
+              </h1>
+              <div className="text-sm text-muted-foreground">
+                {event.hasTwoPhases && <>Current Phase: {event.currentPhase === 'PRELIMINARY' ? 'Preliminary Round' : 'Final Round'}</>}
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 flex justify-end gap-2">
+            <Button variant="outline" size="icon" onClick={toggleTheme}>
+              {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>Logout</Button>
+          </div>
+        </div>
+        {isJudgeLocked() && (
+          <div className="text-center text-destructive font-semibold text-lg">Your scores are locked and cannot be modified.</div>
+        )}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2 flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto border rounded-md">
+            <table className="min-w-full border-separate" style={{ borderSpacing: 0 }}>
+              <thead className="sticky top-0 bg-background z-10">
+                <tr>
+                  <th className="border-b-2 border-muted p-2 text-center align-bottom" rowSpan={2}>Contestant #</th>
+                  {mainGroups.map((main, mainIdx) => (
+                    <th
+                      key={main.id}
+                      colSpan={main.subCriterias.length}
+                      className={["border-b-2 border-muted p-2 text-center align-bottom", mainIdx === 0 ? "border-l-2 border-muted" : "", mainIdx === mainGroups.length - 1 ? "border-r-2 border-muted" : "", mainIdx !== 0 ? "border-l-2 border-muted" : ""].join(" ")}
+                    >
+                      <div className="font-semibold">{main.name}</div>
+                      <div className="text-xs text-muted-foreground">({main.totalWeight}%)</div>
+                    </th>
+                  ))}
+                  <th className="border-b-2 border-muted p-2 text-center align-bottom" rowSpan={2}>Total Score</th>
+                </tr>
+                <tr>
+                  {mainGroups.map((main, mainIdx) => (
+                    main.subCriterias.map((sub, subIdx) => (
+                      <th
+                        key={sub.id}
+                        className={["border-b-2 border-muted p-2 text-center font-normal", (mainIdx === 0 && subIdx === 0) ? "border-l-2 border-muted" : "", (mainIdx === mainGroups.length - 1 && subIdx === main.subCriterias.length - 1) ? "border-r-2 border-muted" : "", mainIdx !== 0 && subIdx === 0 ? "border-l-2 border-muted" : ""].join(" ")}
+                      >
+                        {sub.name}<br />
+                        <span className="text-xs text-muted-foreground">({sub.weight}%)</span>
+                        {sub.autoAssignToAllContestants && <span className="text-xs text-primary"> (Auto)</span>}
+                      </th>
+                    ))
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  // Group contestants by gender if separateGenders is enabled
+                  const sortedContestants = [...filteredContestants].sort((a, b) => {
+                    // Sort by sex first (MALE before FEMALE, undefined/null last)
+                    const sexOrder = { MALE: 0, FEMALE: 1 };
+                    const aSex = sexOrder[a.sex as keyof typeof sexOrder] ?? 2;
+                    const bSex = sexOrder[b.sex as keyof typeof sexOrder] ?? 2;
+
+                    if (aSex !== bSex) {
+                      return aSex - bSex;
+                    }
+
+                    // Then sort by number
+                    return a.number - b.number;
+                  });
+
+                  if (!event?.separateGenders) {
+                    // Render without gender grouping
+                    return sortedContestants.map(contestant => {
+                      // Calculate total score for this contestant (simple sum)
+                      let total = 0;
+                      mainGroups.forEach(main => {
+                        main.subCriterias.forEach(sub => {
+                          const val = parseFloat(scores[`${contestant.id}_${sub.id}`] || "0");
+                          total += isNaN(val) ? 0 : val;
+                        });
+                      });
+
+                      // Determine row background based on gender
+                      const rowClass = contestant.sex === 'MALE'
+                        ? 'bg-blue-50 dark:bg-blue-950/20'
+                        : contestant.sex === 'FEMALE'
+                          ? 'bg-pink-50 dark:bg-pink-950/20'
+                          : '';
+
+                      return (
+                        <tr key={contestant.id} className={rowClass}>
+                          <td className="border-b-2 border-muted p-1 font-mono whitespace-nowrap text-xs text-center">
+                            {event?.separateGenders && contestant.sex ? `${contestant.sex.charAt(0)}-` : ''}#{contestant.number}
+                          </td>
+                          {mainGroups.map((main, mainIdx) => (
+                            main.subCriterias.map((sub, subIdx) => (
+                              <td
+                                key={sub.id}
+                                className={["border-b-2 border-muted p-1 text-center", (mainIdx === 0 && subIdx === 0) ? "border-l-2 border-muted" : "", (mainIdx === mainGroups.length - 1 && subIdx === main.subCriterias.length - 1) ? "border-r-2 border-muted" : "", mainIdx !== 0 && subIdx === 0 ? "border-l-2 border-muted" : ""].join(" ")}
+                              >
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={sub.weight}
+                                  step={0.01}
+                                  className="w-full h-8 px-1 py-0 text-xs text-center"
+                                  value={scores[`${contestant.id}_${sub.id}`] || ""}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    if (v && parseFloat(v) > sub.weight) {
+                                      handleScoreChange(contestant.id, sub.id, "");
+                                      e.target.classList.add("animate-shake");
+                                      setTimeout(() => {
+                                        e.target.classList.remove("animate-shake");
+                                      }, 1200);
+                                      return;
+                                    }
+                                    handleScoreChange(contestant.id, sub.id, v);
+                                  }}
+                                  required={!sub.autoAssignToAllContestants}
+                                  disabled={sub.autoAssignToAllContestants || isJudgeLocked()}
+                                />
+                              </td>
+                            ))
+                          ))}
+                          <td className="border-b-2 border-muted p-1 text-center font-bold text-xs">{total.toFixed(2)}</td>
+                        </tr>
+                      );
+                    });
+                  }
+
+                  // Group by gender and render with headers
+                  const genderGroups = sortedContestants.reduce((groups, contestant) => {
+                    const gender = contestant.sex || 'OTHER';
+                    if (!groups[gender]) groups[gender] = [];
+                    groups[gender].push(contestant);
+                    return groups;
+                  }, {} as Record<string, typeof sortedContestants>);
+
+                  const genderOrder = ['MALE', 'FEMALE', 'OTHER'];
+                  const genderLabels = { MALE: 'Male Contestants', FEMALE: 'Female Contestants', OTHER: 'Other Contestants' };
+
+                  return genderOrder.flatMap(gender => {
+                    const contestants = genderGroups[gender] || [];
+                    if (contestants.length === 0) return [];
+
+                    const rows = [];
+
+                    // Add gender header row
+                    rows.push(
+                      <tr key={`header-${gender}`} className="bg-muted/50">
+                        <td
+                          colSpan={1 + mainGroups.reduce((sum, main) => sum + main.subCriterias.length, 0) + 1}
+                          className="border-b-2 border-muted p-3 text-center font-bold text-sm"
+                        >
+                          {genderLabels[gender as keyof typeof genderLabels]}
+                        </td>
+                      </tr>
+                    );
+
+                    // Add contestant rows
+                    contestants.forEach(contestant => {
+                      // Calculate total score for this contestant (simple sum)
+                      let total = 0;
+                      mainGroups.forEach(main => {
+                        main.subCriterias.forEach(sub => {
+                          const val = parseFloat(scores[`${contestant.id}_${sub.id}`] || "0");
+                          total += isNaN(val) ? 0 : val;
+                        });
+                      });
+
+                      // Determine row background based on gender
+                      const rowClass = contestant.sex === 'MALE'
+                        ? 'bg-blue-50 dark:bg-blue-950/20'
+                        : contestant.sex === 'FEMALE'
+                          ? 'bg-pink-50 dark:bg-pink-950/20'
+                          : '';
+
+                      rows.push(
+                        <tr key={contestant.id} className={rowClass}>
+                          <td className="border-b-2 border-muted p-1 font-mono whitespace-nowrap text-xs text-center">
+                            {event?.separateGenders && contestant.sex ? `${contestant.sex.charAt(0)}-` : ''}#{contestant.number}
+                          </td>
+                          {mainGroups.map((main, mainIdx) => (
+                            main.subCriterias.map((sub, subIdx) => (
+                              <td
+                                key={sub.id}
+                                className={["border-b-2 border-muted p-1 text-center", (mainIdx === 0 && subIdx === 0) ? "border-l-2 border-muted" : "", (mainIdx === mainGroups.length - 1 && subIdx === main.subCriterias.length - 1) ? "border-r-2 border-muted" : "", mainIdx !== 0 && subIdx === 0 ? "border-l-2 border-muted" : ""].join(" ")}
+                              >
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={sub.weight}
+                                  step={0.01}
+                                  className="w-full h-8 px-1 py-0 text-xs text-center"
+                                  value={scores[`${contestant.id}_${sub.id}`] || ""}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    if (v && parseFloat(v) > sub.weight) {
+                                      handleScoreChange(contestant.id, sub.id, "");
+                                      e.target.classList.add("animate-shake");
+                                      setTimeout(() => {
+                                        e.target.classList.remove("animate-shake");
+                                      }, 1200);
+                                      return;
+                                    }
+                                    handleScoreChange(contestant.id, sub.id, v);
+                                  }}
+                                  required={!sub.autoAssignToAllContestants}
+                                  disabled={sub.autoAssignToAllContestants || isJudgeLocked()}
+                                />
+                              </td>
+                            ))
+                          ))}
+                          <td className="border-b-2 border-muted p-1 text-center font-bold text-xs">{total.toFixed(2)}</td>
+                        </tr>
+                      );
+                    });
+
+                    return rows;
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+          <Button type="submit" className="self-end" disabled={isJudgeLocked()}>Submit Scores</Button>
+        </form>
+      </Card>
+    </div>
+  );
+}

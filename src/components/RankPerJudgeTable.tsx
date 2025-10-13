@@ -1,0 +1,352 @@
+import React, { useEffect, useState } from "react";
+import { getApiUrl } from "@/lib/api";
+
+interface RawScore {
+  contestantId: number;
+  contestantName: string;
+  judgeId: number;
+  judgeNumber: number;
+  judgeName: string;
+  criteriaId: number;
+  value: number;
+}
+
+interface Judge {
+  id: number;
+  name: string;
+  number: number;
+}
+
+interface Contestant {
+  id: number;
+  name: string;
+  number?: number;
+  sex?: string;
+}
+
+interface RankPerJudgeTableProps {
+  eventId?: number;
+  phase?: string;
+  eventSettings?: {
+    separateGenders: boolean;
+    finalistsCount: number;
+    currentPhase: string;
+    hasTwoPhases: boolean;
+  } | null;
+}
+
+export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, phase = "PRELIMINARY", eventSettings }) => {
+  const [loading, setLoading] = useState(true);
+  const [scores, setScores] = useState<RawScore[]>([]);
+  const [judges, setJudges] = useState<Judge[]>([]);
+  const [contestants, setContestants] = useState<Contestant[]>([]);
+  const [criteria, setCriteria] = useState<{ id: number; parentId?: number | null }[]>([]);
+
+  useEffect(() => {
+    const url = eventId ? `/api/raw-scores?eventId=${eventId}&phase=${phase}` : `/api/raw-scores?phase=${phase}`;
+    fetch(getApiUrl(url))
+      .then((res) => res.json())
+      .then((data) => {
+        setScores(data.scores);
+        setJudges(
+          data.judges
+            .map((j: { id: number, name: string, number: number }) => ({ id: j.id, name: j.name, number: Number(j.number) }))
+            .sort((a: Judge, b: Judge) => a.number - b.number)
+        );
+        setContestants(
+          data.contestants
+            .map((c: { id: number, name: string, number: number, sex?: string }) => ({ id: c.id, name: c.name, number: c.number, sex: c.sex }))
+        );
+        setCriteria(data.criteria);
+        setLoading(false);
+      });
+  }, [eventId, phase]);
+
+  if (loading) return <div className="py-8 text-center">Loading...</div>;
+
+  // Function to calculate rankings for a group of contestants
+  const calculateRankings = (contestantGroup: Contestant[], scoreGroup: RawScore[], judgeGroup: Judge[], criteriaGroup: { id: number; parentId?: number | null }[]) => {
+    // Only use sub-criteria (criteria with parentId)
+    const subCriteriaIds = criteriaGroup.filter((c) => c.parentId).map((c) => c.id);
+
+    // For each judge and contestant, sum all sub-criteria scores
+    const judgeScores: Record<number, { contestantId: number; value: number }[]> = {};
+    judgeGroup.forEach((judge) => {
+      judgeScores[judge.id] = contestantGroup.map((c) => {
+        const total = scoreGroup
+          .filter((s) => s.judgeId === judge.id && s.contestantId === c.id && subCriteriaIds.includes(s.criteriaId))
+          .reduce((sum, s) => sum + s.value, 0);
+        return { contestantId: c.id, value: total };
+      });
+    });
+
+    // For each judge, compute ranks (dense ranking)
+    const judgeRanks: Record<number, Record<number, number>> = {};
+    judgeGroup.forEach((judge) => {
+      const arr = [...judgeScores[judge.id]];
+      arr.sort((a, b) => b.value - a.value);
+      let rank = 1;
+      for (let i = 0; i < arr.length; ) {
+        const tieValue = arr[i].value;
+        let tieEnd = i;
+        while (tieEnd + 1 < arr.length && arr[tieEnd + 1].value === tieValue) {
+          tieEnd++;
+        }
+        for (let j = i; j <= tieEnd; j++) {
+          if (!judgeRanks[judge.id]) judgeRanks[judge.id] = {};
+          judgeRanks[judge.id][arr[j].contestantId] = rank;
+        }
+        rank += (tieEnd - i + 1);
+        i = tieEnd + 1;
+      }
+    });
+
+    return judgeRanks;
+  };
+
+  // Function to get eligible contestants for the current phase
+  const getEligibleContestants = (allContestants: Contestant[], allScores: RawScore[], targetPhase: string) => {
+    // If contest has only one phase, all contestants are eligible
+    if (!eventSettings?.hasTwoPhases) {
+      return allContestants;
+    }
+
+    if (targetPhase === "PRELIMINARY") {
+      return allContestants;
+    }
+
+    // For FINAL phase, only include preliminary finalists
+    const prelimScores = allScores; // Include all scores for preliminary ranking
+    const prelimContestants = allContestants;
+
+    if (!eventSettings?.separateGenders) {
+      // Unified judging - take top N overall
+      const rankings = calculateRankings(prelimContestants, prelimScores, judges, criteria);
+      // Get top contestants by averaging their ranks across judges
+      const contestantAvgRanks: Record<number, number> = {};
+      prelimContestants.forEach(c => {
+        let totalRank = 0;
+        let judgeCount = 0;
+        judges.forEach(j => {
+          if (rankings[j.id]?.[c.id]) {
+            totalRank += rankings[j.id][c.id];
+            judgeCount++;
+          }
+        });
+        contestantAvgRanks[c.id] = judgeCount > 0 ? totalRank / judgeCount : Infinity;
+      });
+      
+      const sortedContestants = prelimContestants
+        .sort((a, b) => contestantAvgRanks[a.id] - contestantAvgRanks[b.id])
+        .slice(0, eventSettings?.finalistsCount || 5);
+      return sortedContestants;
+    } else {
+      // Separate genders - take top N per gender
+      const maleContestants = prelimContestants.filter(c => c.sex === "MALE");
+      const femaleContestants = prelimContestants.filter(c => c.sex === "FEMALE");
+      
+      const maleRankings = calculateRankings(maleContestants, prelimScores, judges, criteria);
+      const femaleRankings = calculateRankings(femaleContestants, prelimScores, judges, criteria);
+      
+      const contestantAvgRanks = (contestantGroup: Contestant[], rankings: Record<number, Record<number, number>>) => {
+        const avgRanks: Record<number, number> = {};
+        contestantGroup.forEach(c => {
+          let totalRank = 0;
+          let judgeCount = 0;
+          judges.forEach(j => {
+            if (rankings[j.id]?.[c.id]) {
+              totalRank += rankings[j.id][c.id];
+              judgeCount++;
+            }
+          });
+          avgRanks[c.id] = judgeCount > 0 ? totalRank / judgeCount : Infinity;
+        });
+        return avgRanks;
+      };
+      
+      const maleAvgRanks = contestantAvgRanks(maleContestants, maleRankings);
+      const femaleAvgRanks = contestantAvgRanks(femaleContestants, femaleRankings);
+      
+      const finalistsCount = eventSettings?.finalistsCount || 5;
+      const maleFinalists = maleContestants
+        .sort((a, b) => maleAvgRanks[a.id] - maleAvgRanks[b.id])
+        .slice(0, finalistsCount);
+      const femaleFinalists = femaleContestants
+        .sort((a, b) => femaleAvgRanks[a.id] - femaleAvgRanks[b.id])
+        .slice(0, finalistsCount);
+      
+      return [...maleFinalists, ...femaleFinalists];
+    }
+  };
+
+  // Get eligible contestants for this phase
+  const eligibleContestants = getEligibleContestants(contestants, scores, phase);
+  const eligibleContestantIds = new Set(eligibleContestants.map(c => c.id));
+  
+  // Filter scores to only include eligible contestants
+  const filteredScores = scores.filter(s => eligibleContestantIds.has(s.contestantId));
+
+  // Only use sub-criteria (criteria with parentId)
+  const subCriteriaIds = criteria.filter((c) => c.parentId).map((c) => c.id);
+
+  // For each judge and contestant, sum all sub-criteria scores
+  const judgeScores: Record<number, { contestantId: number; value: number }[]> = {};
+  judges.forEach((judge) => {
+    judgeScores[judge.id] = eligibleContestants.map((c) => {
+      const total = filteredScores
+        .filter((s) => s.judgeId === judge.id && s.contestantId === c.id && subCriteriaIds.includes(s.criteriaId))
+        .reduce((sum, s) => sum + s.value, 0);
+      return { contestantId: c.id, value: total };
+    });
+  });
+
+  // For each judge, compute ranks (dense ranking)
+  const judgeRanks: Record<number, Record<number, number>> = {};
+  judges.forEach((judge) => {
+    const arr = [...judgeScores[judge.id]];
+    arr.sort((a, b) => b.value - a.value);
+    let rank = 1;
+    for (let i = 0; i < arr.length; ) {
+      const tieValue = arr[i].value;
+      let tieEnd = i;
+      while (tieEnd + 1 < arr.length && arr[tieEnd + 1].value === tieValue) {
+        tieEnd++;
+      }
+      for (let j = i; j <= tieEnd; j++) {
+        if (!judgeRanks[judge.id]) judgeRanks[judge.id] = {};
+        judgeRanks[judge.id][arr[j].contestantId] = rank;
+      }
+      rank += (tieEnd - i + 1);
+      i = tieEnd + 1;
+    }
+  });
+
+  // For each contestant, sum their ranks across all judges
+  let contestantRows;
+  let maleContestantRows;
+  let femaleContestantRows;
+  
+  if (eventSettings?.separateGenders) {
+    // Separate by gender
+    const maleContestants = eligibleContestants.filter(c => c.sex === "MALE");
+    const femaleContestants = eligibleContestants.filter(c => c.sex === "FEMALE");
+    
+    maleContestantRows = maleContestants.map((c) => {
+      const ranks = judges.map((j) => judgeRanks[j.id]?.[c.id] ?? "");
+      const totalRank = ranks.reduce((sum, r) => sum + (typeof r === "number" ? r : 0), 0);
+      return {
+        id: c.id,
+        name: c.name,
+        number: c.number ?? 0,
+        ranks,
+        totalRank,
+      };
+    });
+    
+    femaleContestantRows = femaleContestants.map((c) => {
+      const ranks = judges.map((j) => judgeRanks[j.id]?.[c.id] ?? "");
+      const totalRank = ranks.reduce((sum, r) => sum + (typeof r === "number" ? r : 0), 0);
+      return {
+        id: c.id,
+        name: c.name,
+        number: c.number ?? 0,
+        ranks,
+        totalRank,
+      };
+    });
+    
+    contestantRows = null;
+  } else {
+    // Unified
+    contestantRows = eligibleContestants.map((c) => {
+      const ranks = judges.map((j) => judgeRanks[j.id]?.[c.id] ?? "");
+      const totalRank = ranks.reduce((sum, r) => sum + (typeof r === "number" ? r : 0), 0);
+      return {
+        id: c.id,
+        name: c.name,
+        number: c.number ?? 0,
+        ranks,
+        totalRank,
+      };
+    });
+    maleContestantRows = null;
+    femaleContestantRows = null;
+  }
+
+  // Helper function to render a ranking table
+  const renderRankingTable = (rows: typeof contestantRows, title?: string) => {
+    if (!rows) return null;
+    
+    // Sort by contestant number ascending
+    rows.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+
+    // Find the 1st, 2nd, and 3rd place totalRanks (handle ties)
+    const sortedRanks = Array.from(new Set(rows.map((row) => row.totalRank))).sort((a, b) => a - b);
+    const first = sortedRanks[0];
+    const second = sortedRanks[1];
+    const third = sortedRanks[2];
+
+    return (
+      <div className="mb-6">
+        {title && <h3 className="text-lg font-semibold mb-2">{title}</h3>}
+        <div className="overflow-x-auto">
+          <table className="min-w-full border text-sm">
+            <thead>
+              <tr>
+                <th className="border px-2 py-1">No</th>
+                <th className="border px-2 py-1">Name</th>
+                {judges.map((judge) => (
+                  <th key={judge.id} className="border px-2 py-1 text-center">
+                    Judge {judge.number}
+                  </th>
+                ))}
+                <th className="border px-2 py-1">Total Rank</th>
+                <th className="border px-2 py-1">&nbsp;</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => {
+                let rowClass = "";
+                let place = "";
+                if (row.totalRank === first) {
+                  rowClass = "bg-yellow-100 font-bold";
+                  place = "1st";
+                } else if (row.totalRank === second) {
+                  rowClass = "bg-gray-200 font-semibold";
+                  place = "2nd";
+                } else if (row.totalRank === third) {
+                  rowClass = "bg-orange-100 font-semibold";
+                  place = "3rd";
+                }
+                return (
+                  <tr key={row.id} className={rowClass}>
+                    <td className="border px-2 py-1 text-center">{row.number || idx + 1}</td>
+                    <td className="border px-2 py-1">{row.name}</td>
+                    {row.ranks.map((r, i) => (
+                      <td className="border px-2 py-1 text-center" key={i}>{typeof r === "number" ? r : ""}</td>
+                    ))}
+                    <td className="border px-2 py-1 text-center font-bold">{row.totalRank}</td>
+                    <td className="border px-2 py-1 text-center font-bold">{place}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {eventSettings?.separateGenders ? (
+        <>
+          {renderRankingTable(maleContestantRows, "Male Contestants")}
+          {renderRankingTable(femaleContestantRows, "Female Contestants")}
+        </>
+      ) : (
+        renderRankingTable(contestantRows)
+      )}
+    </div>
+  );
+};

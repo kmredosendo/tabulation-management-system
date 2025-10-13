@@ -1,0 +1,112 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id          Int          @id @default(autoincrement())
+  name        String
+  date        DateTime
+  institutionName String?
+  institutionAddress String?
+  venue       String?
+  status      EventStatus @default(ACTIVE)
+  currentPhase Phase      @default(PRELIMINARY)
+  hasTwoPhases Boolean    @default(false)
+  separateGenders Boolean @default(false)
+  finalistsCount Int       @default(0)
+  contestants Contestant[]
+  judges      Judge[]
+  criteria    Criteria[]
+  scores      Score[]
+
+  @@map("event")
+}
+
+enum EventStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum Sex {
+  MALE
+  FEMALE
+}
+
+enum Phase {
+  PRELIMINARY
+  FINAL
+}
+
+model Contestant {
+  id      Int    @id @default(autoincrement())
+  number  Int
+  name    String
+  sex     Sex?
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId Int
+  scores  Score[]
+
+  @@map("contestant")
+}
+
+model Judge {
+  id      Int    @id @default(autoincrement())
+  number  Int
+  name    String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId Int
+  scores  Score[]
+  lockedPreliminary Boolean @default(false)
+  lockedFinal Boolean @default(false)
+
+  @@map("judge")
+}
+
+model Criteria {
+  id         Int        @id @default(autoincrement())
+  name       String
+  identifier String?   // Unique identifier for programmatic use (e.g. 'best-in-talent')
+  weight     Float?
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId    Int
+  phase      Phase      @default(PRELIMINARY)
+  parentId   Int?       // null for main criteria, set for sub-criteria
+  parent     Criteria?  @relation("SubCriteria", fields: [parentId], references: [id])
+  subCriterias Criteria[] @relation("SubCriteria")
+  autoAssignToAllContestants Boolean @default(false)
+  scores     Score[]
+
+  @@unique([identifier, eventId, phase])
+  @@map("criteria")
+}
+
+model Score {
+  id           Int       @id @default(autoincrement())
+  value        Float
+  contestant   Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  contestantId Int
+  judge        Judge     @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  judgeId      Int
+  criteria     Criteria  @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
+  criteriaId   Int
+  event        Event     @relation(fields: [eventId], references: [id])
+  eventId      Int
+  phase        Phase     @default(PRELIMINARY)
+
+  @@map("score")
+}
+
+model Admin {
+  id       Int    @id @default(autoincrement())
+  username String @unique
+  password String
+  name     String
+
+  @@map("admin")
+}
