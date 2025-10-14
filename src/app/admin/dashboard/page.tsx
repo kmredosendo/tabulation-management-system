@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { toast, Toaster } from "sonner";
 import { getApiUrl } from "@/lib/api";
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
   const [editHasTwoPhases, setEditHasTwoPhases] = useState(false);
   const [editSeparateGenders, setEditSeparateGenders] = useState(false);
   const [editFinalistsCount, setEditFinalistsCount] = useState("");
+  const [editTieBreakingStrategy, setEditTieBreakingStrategy] = useState("INCLUDE_TIES");
   const [editFormError, setEditFormError] = useState("");
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -54,12 +56,14 @@ export default function AdminDashboard() {
         setEditHasTwoPhases(fullEvent.hasTwoPhases !== undefined ? fullEvent.hasTwoPhases : false);
         setEditSeparateGenders(fullEvent.separateGenders || false);
         setEditFinalistsCount(fullEvent.finalistsCount ? fullEvent.finalistsCount.toString() : "");
+        setEditTieBreakingStrategy(fullEvent.tieBreakingStrategy || "INCLUDE_TIES");
       }
     } catch (error) {
       console.error("Failed to fetch event details:", error);
       setEditHasTwoPhases(false);
       setEditSeparateGenders(false);
       setEditFinalistsCount("");
+      setEditTieBreakingStrategy("INCLUDE_TIES");
     }
     
     setEditFormError("");
@@ -81,12 +85,14 @@ export default function AdminDashboard() {
         venue: editVenue,
         hasTwoPhases: editHasTwoPhases,
         separateGenders: editSeparateGenders,
-        finalistsCount: editFinalistsCount ? parseInt(editFinalistsCount) : undefined
+        finalistsCount: editFinalistsCount ? parseInt(editFinalistsCount) : undefined,
+        tieBreakingStrategy: editTieBreakingStrategy
       }),
     });
     if (res.ok) {
       setEditDialogOpen(false);
       setEditEvent(null);
+      setEditTieBreakingStrategy("INCLUDE_TIES");
       toast.success('Event updated successfully');
       setRefreshEvents(k => k + 1);
     } else {
@@ -137,6 +143,7 @@ export default function AdminDashboard() {
   const [newHasTwoPhases, setNewHasTwoPhases] = useState(false);
   const [newSeparateGenders, setNewSeparateGenders] = useState(false);
   const [newFinalistsCount, setNewFinalistsCount] = useState("");
+  const [newTieBreakingStrategy, setNewTieBreakingStrategy] = useState("INCLUDE_TIES");
   const [formError, setFormError] = useState("");
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +159,8 @@ export default function AdminDashboard() {
         venue: newVenue,
         hasTwoPhases: newHasTwoPhases,
         separateGenders: newSeparateGenders,
-        finalistsCount: newFinalistsCount ? parseInt(newFinalistsCount) : undefined
+        finalistsCount: newFinalistsCount ? parseInt(newFinalistsCount) : undefined,
+        tieBreakingStrategy: newTieBreakingStrategy
       }),
     });
     if (res.ok) {
@@ -165,6 +173,7 @@ export default function AdminDashboard() {
       setNewHasTwoPhases(false);
       setNewSeparateGenders(false);
       setNewFinalistsCount("");
+      setNewTieBreakingStrategy("INCLUDE_TIES");
       setFormError("");
       toast.success('Event created successfully');
       const refreshed = await fetch(getApiUrl("/api/admin/events")).then(r => r.json());
@@ -256,6 +265,24 @@ export default function AdminDashboard() {
                           min="1"
                           max="20"
                         />
+                      </div>
+                    )}
+                    {newHasTwoPhases && (
+                      <div>
+                        <label htmlFor="tie-breaking-strategy" className="text-sm font-medium">
+                          Tie-breaking Strategy for Finalists Selection
+                        </label>
+                        <Select value={newTieBreakingStrategy} onValueChange={setNewTieBreakingStrategy}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select tie-breaking strategy" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INCLUDE_TIES">Include Ties (Allow more finalists if tied)</SelectItem>
+                            <SelectItem value="TOTAL_SCORE">Use Total Score as Tiebreaker</SelectItem>
+                            <SelectItem value="CONTESTANT_NUMBER">Use Contestant Number as Tiebreaker</SelectItem>
+                            <SelectItem value="MANUAL_SELECTION">Manual Selection Required</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
                     <div className="flex items-center space-x-2">
@@ -426,6 +453,24 @@ export default function AdminDashboard() {
                                       min="1"
                                       max="20"
                                     />
+                                  </div>
+                                )}
+                                {editHasTwoPhases && (
+                                  <div>
+                                    <label htmlFor={`edit-tie-breaking-strategy-${event.id}`} className="text-sm font-medium">
+                                      Tie-breaking Strategy for Finalists Selection
+                                    </label>
+                                    <Select value={editTieBreakingStrategy} onValueChange={setEditTieBreakingStrategy}>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select tie-breaking strategy" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="INCLUDE_TIES">Include Ties (Allow more finalists if tied)</SelectItem>
+                                        <SelectItem value="TOTAL_SCORE">Use Total Score as Tiebreaker</SelectItem>
+                                        <SelectItem value="CONTESTANT_NUMBER">Use Contestant Number as Tiebreaker</SelectItem>
+                                        <SelectItem value="MANUAL_SELECTION">Manual Selection Required</SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                 )}
                                 <div className="flex items-center space-x-2">

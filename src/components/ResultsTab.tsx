@@ -144,11 +144,10 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
       <div className="flex-1 overflow-y-auto pt-2">
         {categoriesLoading ? (
           <div className="text-center py-8">Loading categories...</div>
-        ) : categories.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">No categories found</div>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 w-full">
+            {/* Special categories with identifiers */}
             {categories.filter(cat => cat.phase === selectedViewPhase).map(cat => {
               const iconInfo = getCategoryIcon(cat.identifier);
               const Icon = iconInfo.icon;

@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ClipboardList, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog";
+import { ClipboardList, Eye, Trophy } from "lucide-react";
+import { FinalistSelectionTab } from "@/components/FinalistSelectionTab";
 
 type Judge = {
   id: number;
@@ -26,6 +28,7 @@ type Event = {
   hasTwoPhases: boolean;
   separateGenders: boolean;
   finalistsCount: number;
+  tieBreakingStrategy?: string;
 };
 
 interface ScoresTabProps {
@@ -37,10 +40,14 @@ interface ScoresTabProps {
   eventId: string | string[] | undefined;
   currentPhase?: string;
   event?: Event;
+  onTieStatusChange?: () => void;
+  hasUnresolvedTies?: boolean;
 }
 
-export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJudgeLockToggle, eventId, currentPhase = "PRELIMINARY", event }: ScoresTabProps) {
+export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJudgeLockToggle, eventId, currentPhase = "PRELIMINARY", event, onTieStatusChange, hasUnresolvedTies = false }: ScoresTabProps) {
   const [selectedViewPhase, setSelectedViewPhase] = useState<string>(currentPhase);
+  const [finalistDialogOpen, setFinalistDialogOpen] = useState(false);
+  
   return (
     <div className="h-full flex flex-col">
       <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-30 border-b flex-shrink-0 py-2 px-0">
@@ -55,6 +62,26 @@ export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJu
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Select Finalists Button - only show for manual selection in preliminary phase when there are unresolved ties */}
+            {event?.hasTwoPhases && event?.tieBreakingStrategy === 'MANUAL_SELECTION' && event?.currentPhase === 'PRELIMINARY' && hasUnresolvedTies && (
+              <Dialog open={finalistDialogOpen} onOpenChange={setFinalistDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="default" size="sm" className="flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
+                    Select Finalists
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl w-[80vw] max-h-[85vh] overflow-hidden">
+                  <DialogTitle>Select Finalists</DialogTitle>
+                  <div className="overflow-hidden" style={{ height: 'calc(85vh - 120px)' }}>
+                    {event && <FinalistSelectionTab event={event} onSuccess={() => {
+                      setFinalistDialogOpen(false);
+                      if (onTieStatusChange) onTieStatusChange();
+                    }} />}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
             {event?.hasTwoPhases && (
               <Select value={selectedViewPhase} onValueChange={setSelectedViewPhase}>
                 <SelectTrigger className="w-40" size="sm">

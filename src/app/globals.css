@@ -142,3 +142,21 @@
     print-color-adjust: exact !important;
   }
 }
+
+/* Pulsing warning animation for tabs */
+@keyframes pulseWarning {
+  0%, 100% {
+    background-color: theme('colors.amber.100');
+    border-color: theme('colors.amber.300');
+    color: theme('colors.amber.800');
+  }
+  50% {
+    background-color: theme('colors.amber.200');
+    border-color: theme('colors.amber.400');
+    color: theme('colors.amber.900');
+  }
+}
+
+.pulse-warning {
+  animation: pulseWarning 2s ease-in-out infinite;
+}

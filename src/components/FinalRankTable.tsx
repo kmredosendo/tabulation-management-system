@@ -34,6 +34,7 @@ interface FinalRankTableProps {
     finalistsCount: number;
     currentPhase: string;
     hasTwoPhases: boolean;
+    tieBreakingStrategy?: string;
   } | null;
 }
 

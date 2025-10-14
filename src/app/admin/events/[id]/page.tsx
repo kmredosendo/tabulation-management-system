@@ -40,6 +40,7 @@ type Event = {
   hasTwoPhases: boolean;
   separateGenders: boolean;
   finalistsCount: number;
+  tieBreakingStrategy?: string;
 };
 
 type Judge = {
@@ -66,6 +67,9 @@ export default function EventDetailsPage() {
   // Categories state
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categories, setCategories] = useState<Array<{ id: number; name: string; identifier: string; phase: string }>>([]);
+  
+  // Tie resolution state
+  const [hasUnresolvedTies, setHasUnresolvedTies] = useState(false);
 
   // Fetch event data
   useEffect(() => {
@@ -124,6 +128,148 @@ export default function EventDetailsPage() {
     }
   }, [event?.id, fetchJudges]);
 
+  // Helper function to check if there are unresolved ties that prevent phase advancement
+  const checkForUnresolvedTies = useCallback(async (): Promise<boolean> => {
+    if (!event || !event.hasTwoPhases || event.currentPhase !== 'PRELIMINARY') return false;
+
+    // For manual selection strategy, check if there are actual ties that need manual resolution
+    if (event.tieBreakingStrategy === 'MANUAL_SELECTION') {
+      try {
+        // Get raw scores to calculate averages and detect ties
+        const scoresRes = await fetch(getApiUrl(`/api/raw-scores?eventId=${event.id}&phase=PRELIMINARY`));
+        if (!scoresRes.ok) return false; // If can't get scores, assume no ties
+        
+        const scoresData = await scoresRes.json();
+        
+        if (!scoresData.scores || scoresData.scores.length === 0) return false; // No scores yet
+        
+        // Calculate contestant averages (same logic as score page)
+        const contestantScores: Record<number, { total: number; count: number; average: number; contestant: { id: number; name: string; sex: string; number?: number } }> = {};
+        
+        scoresData.scores.forEach((score: { contestantId: number; value: number; contestant: { id: number; name: string; sex: string; number?: number } }) => {
+          if (!contestantScores[score.contestantId]) {
+            contestantScores[score.contestantId] = {
+              total: 0,
+              count: 0,
+              average: 0,
+              contestant: score.contestant
+            };
+          }
+          contestantScores[score.contestantId].total += score.value;
+          contestantScores[score.contestantId].count += 1;
+        });
+
+        // Calculate averages
+        Object.keys(contestantScores).forEach(id => {
+          const data = contestantScores[parseInt(id)];
+          data.average = data.count > 0 ? data.total / data.count : 0;
+        });
+
+        const averages = Object.entries(contestantScores).map(([id, data]) => ({
+          id: parseInt(id),
+          average: data.average,
+          contestant: data.contestant
+        }));
+
+        // Check for ties that actually require manual selection
+        const checkForTies = (contestants: typeof averages, finalistsCount: number): boolean => {
+          if (contestants.length <= finalistsCount) return false; // Not enough contestants to have ties
+          
+          const sorted = contestants.sort((a, b) => b.average - a.average);
+          const cutoffScore = sorted[finalistsCount - 1].average;
+          
+          // Find all contestants tied at the cutoff score
+          const tiedContestants = sorted.filter(c => c.average === cutoffScore);
+          
+          // Find contestants better than the cutoff (automatically qualify)
+          const betterThanCutoff = sorted.filter(c => c.average > cutoffScore);
+          
+          // Calculate remaining spots after automatic qualifiers
+          const remainingSpots = finalistsCount - betterThanCutoff.length;
+          
+          // Manual selection only needed if more contestants are tied than remaining spots
+          return tiedContestants.length > remainingSpots;
+        };
+
+        let hasTies = false;
+
+        if (event.separateGenders) {
+          // Check ties for each gender separately
+          const maleContestants = averages.filter(avg => avg.contestant.sex === 'MALE');
+          const femaleContestants = averages.filter(avg => avg.contestant.sex === 'FEMALE');
+          
+          hasTies = checkForTies(maleContestants, event.finalistsCount) || 
+                   checkForTies(femaleContestants, event.finalistsCount);
+        } else {
+          // Check ties for all contestants together
+          hasTies = checkForTies(averages, event.finalistsCount);
+        }
+
+        if (!hasTies) return false; // No ties to resolve
+
+        // If there are ties, check if manual selections have been made
+        const selectionsRes = await fetch(getApiUrl(`/api/admin/manual-finalists?eventId=${event.id}`));
+        const selectionsData = await selectionsRes.json();
+        
+        return !selectionsRes.ok || !selectionsData.selections || selectionsData.selections.length !== event.finalistsCount;
+      } catch (error) {
+        console.error('Error checking for ties:', error);
+        return false; // Don't block phase change if we can't determine tie status
+      }
+    }
+
+    return false; // Other tie-breaking strategies are automatically resolved
+  }, [event]);
+
+  // Check for unresolved ties when event changes
+  useEffect(() => {
+    const checkTies = async () => {
+      if (event) {
+        const unresolvedTies = await checkForUnresolvedTies();
+        setHasUnresolvedTies(unresolvedTies);
+      }
+    };
+    checkTies();
+  }, [event, checkForUnresolvedTies]);
+
+  // Real-time polling for tie status changes
+  useEffect(() => {
+    if (!event || !event.hasTwoPhases || event.currentPhase !== 'PRELIMINARY') return;
+
+    let timer: NodeJS.Timeout | null = null;
+    let cancelled = false;
+
+    const pollTieStatus = async () => {
+      if (cancelled) return;
+      
+      try {
+        const unresolvedTies = await checkForUnresolvedTies();
+        setHasUnresolvedTies(unresolvedTies);
+      } catch (error) {
+        console.error('Error polling tie status:', error);
+      }
+      
+      if (!cancelled) {
+        timer = setTimeout(pollTieStatus, 3000); // Poll every 3 seconds
+      }
+    };
+
+    pollTieStatus();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [event, checkForUnresolvedTies]);
+
+  // Function to refresh tie status - can be called when manual selections change
+  const refreshTieStatus = useCallback(async () => {
+    if (event) {
+      const unresolvedTies = await checkForUnresolvedTies();
+      setHasUnresolvedTies(unresolvedTies);
+    }
+  }, [event, checkForUnresolvedTies]);
+
   const handleViewRaw = (judge: Judge, phase: string) => {
     setSelectedJudge(judge);
     setSelectedPhase(phase);
@@ -163,6 +309,11 @@ export default function EventDetailsPage() {
   const handlePhaseChange = async (newPhase: string) => {
     if (!event) return;
 
+    // If switching to FINAL phase with unresolved ties, silently prevent
+    if (newPhase === 'FINAL' && event.currentPhase === 'PRELIMINARY' && hasUnresolvedTies) {
+      return; // Disabled items shouldn't trigger this, but just in case
+    }
+
     // Update local state immediately
     setEvent({ ...event, currentPhase: newPhase });
 
@@ -176,6 +327,10 @@ export default function EventDetailsPage() {
     if (!res.ok) {
       // Revert local state on error
       setEvent({ ...event, currentPhase: event.currentPhase });
+    } else {
+      // Refresh tie status after successful phase change
+      const unresolvedTies = await checkForUnresolvedTies();
+      setHasUnresolvedTies(unresolvedTies);
     }
   };
 
@@ -218,17 +373,34 @@ export default function EventDetailsPage() {
               </div>
               <div className="flex items-center">
                 {event.hasTwoPhases && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Contest Phase:</span>
-                    <Select value={event.currentPhase} onValueChange={handlePhaseChange}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="PRELIMINARY">Preliminary</SelectItem>
-                        <SelectItem value="FINAL">Final</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Contest Phase:</span>
+                      <Select 
+                        value={event.currentPhase} 
+                        onValueChange={(value) => {
+                          // Prevent changing to FINAL if there are unresolved ties
+                          if (value === 'FINAL' && hasUnresolvedTies) {
+                            return;
+                          }
+                          handlePhaseChange(value);
+                        }}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PRELIMINARY">Preliminary</SelectItem>
+                          <SelectItem 
+                            value="FINAL" 
+                            disabled={hasUnresolvedTies}
+                            className={hasUnresolvedTies ? "opacity-50 cursor-not-allowed" : ""}
+                          >
+                            Final
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>
@@ -250,9 +422,19 @@ export default function EventDetailsPage() {
                   <ListChecks className="w-4 h-4" />
                   Criteria
                 </TabsTrigger>
-                <TabsTrigger value="scores" className="flex items-center gap-2">
+                <TabsTrigger 
+                  value="scores" 
+                  className={`flex items-center gap-2 ${
+                    hasUnresolvedTies && event.currentPhase === 'PRELIMINARY' 
+                      ? 'pulse-warning' 
+                      : ''
+                  }`}
+                >
                   <ClipboardList className="w-4 h-4" />
                   Scores
+                  {hasUnresolvedTies && event.currentPhase === 'PRELIMINARY' && (
+                    <span className="ml-1 text-amber-600">⚠️</span>
+                  )}
                 </TabsTrigger>
                 <TabsTrigger value="results" className="flex items-center gap-2">
                   <Medal className="w-4 h-4" />
@@ -287,6 +469,8 @@ export default function EventDetailsPage() {
                     eventId={id || ""}
                     currentPhase={event.currentPhase}
                     event={event}
+                    onTieStatusChange={refreshTieStatus}
+                    hasUnresolvedTies={hasUnresolvedTies}
                   />
                 </TabsContent>
 

@@ -40,7 +40,7 @@ interface Score {
 export default function JudgeScorePage() {
   const params = useParams();
   const judgeId = params?.id;
-  const [event, setEvent] = useState<{ id: number; name: string; currentPhase: string; separateGenders: boolean; hasTwoPhases: boolean; finalistsCount: number | null } | null>(null);
+  const [event, setEvent] = useState<{ id: number; name: string; currentPhase: string; separateGenders: boolean; hasTwoPhases: boolean; finalistsCount: number | null; tieBreakingStrategy?: string } | null>(null);
   const [judge, setJudge] = useState<{ id: number; name: string; number: number; lockedPreliminary: boolean; lockedFinal: boolean } | null>(null);
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [filteredContestants, setFilteredContestants] = useState<Contestant[]>([]);
@@ -66,7 +66,7 @@ export default function JudgeScorePage() {
   }, []);
 
   // Function to determine finalists based on preliminary scores
-  const determineFinalists = useCallback(async (eventId: number, finalistsCount: number, separateGenders: boolean, allContestants: Contestant[]) => {
+  const determineFinalists = useCallback(async (eventId: number, finalistsCount: number, separateGenders: boolean, allContestants: Contestant[], tieBreakingStrategy?: string) => {
     try {
       // Fetch preliminary scores
       const prelimScoresRes = await fetch(getApiUrl(`/api/raw-scores?eventId=${eventId}&phase=PRELIMINARY`));
@@ -77,14 +77,14 @@ export default function JudgeScorePage() {
         return allContestants;
       }
 
-      // Calculate average scores per contestant
-      const contestantScores: Record<number, { total: number; count: number; contestant: Contestant }> = {};
+      // Calculate average and total scores per contestant
+      const contestantScores: Record<number, { total: number; count: number; average: number; contestant: Contestant }> = {};
 
       prelimData.scores.forEach((score: Score) => {
         if (!contestantScores[score.contestantId]) {
           const contestant = allContestants.find((c: Contestant) => c.id === score.contestantId);
           if (contestant) {
-            contestantScores[score.contestantId] = { total: 0, count: 0, contestant };
+            contestantScores[score.contestantId] = { total: 0, count: 0, average: 0, contestant };
           }
         }
         if (contestantScores[score.contestantId]) {
@@ -94,35 +94,99 @@ export default function JudgeScorePage() {
       });
 
       // Calculate averages
+      Object.values(contestantScores).forEach(data => {
+        data.average = data.total / data.count;
+      });
+
       const averages = Object.entries(contestantScores).map(([id, data]) => ({
         id: parseInt(id),
-        average: data.total / data.count,
+        average: data.average,
+        totalScore: data.total,
         contestant: data.contestant
       }));
+
+      // Helper function to get finalists with configurable tie handling
+      const getFinalistsWithStrategy = async (contestants: typeof averages, count: number, strategy: string = 'INCLUDE_TIES') => {
+        const sorted = contestants.sort((a, b) => b.average - a.average);
+        
+        if (sorted.length <= count) {
+          return sorted.map(avg => avg.contestant);
+        }
+
+        // Get the main qualifiers (definitely advance)
+        const definitelyQualified = sorted.slice(0, count);
+        const cutoffScore = definitelyQualified[count - 1].average;
+        
+        // Find contestants tied with the last qualifier
+        const tiedContestants = sorted.filter(c => c.average === cutoffScore);
+        
+        // If no ties, return the exact count
+        if (tiedContestants.length === 1) {
+          return definitelyQualified.map(avg => avg.contestant);
+        }
+
+        // Handle ties based on strategy
+        switch (strategy) {
+          case 'INCLUDE_TIES':
+            // Include all contestants who meet or exceed the cutoff score
+            return sorted.filter(avg => avg.average >= cutoffScore).map(avg => avg.contestant);
+
+          case 'TOTAL_SCORE':
+            // Use total preliminary score as tiebreaker
+            const tiesSorted = tiedContestants.sort((a, b) => b.totalScore - a.totalScore);
+            const nonTiedQualified = sorted.filter(c => c.average > cutoffScore);
+            const slotsRemaining = count - nonTiedQualified.length;
+            return [...nonTiedQualified, ...tiesSorted.slice(0, slotsRemaining)].map(avg => avg.contestant);
+
+          case 'CONTESTANT_NUMBER':
+            // Use contestant number as tiebreaker (lower number wins)
+            const numberSorted = tiedContestants.sort((a, b) => (a.contestant.number || 999) - (b.contestant.number || 999));
+            const nonTiedQualified2 = sorted.filter(c => c.average > cutoffScore);
+            const slotsRemaining2 = count - nonTiedQualified2.length;
+            return [...nonTiedQualified2, ...numberSorted.slice(0, slotsRemaining2)].map(avg => avg.contestant);
+
+          case 'MANUAL_SELECTION':
+            // Check if manual selections exist for this event
+            try {
+              const manualRes = await fetch(getApiUrl(`/api/admin/manual-finalists?eventId=${eventId}`));
+              const manualData = await manualRes.json();
+              
+              if (manualRes.ok && manualData.selections && manualData.selections.length > 0) {
+                // Use manual selections
+                const manualIds = manualData.selections.map((s: { contestant: { id: number } }) => s.contestant.id);
+                return averages
+                  .filter(avg => manualIds.includes(avg.contestant.id))
+                  .map(avg => avg.contestant);
+              } else {
+                // No manual selections yet, include all tied contestants for admin selection
+                console.warn('Manual tie-breaking required - including all tied contestants for admin selection');
+                return sorted.filter(avg => avg.average >= cutoffScore).map(avg => avg.contestant);
+              }
+            } catch (error) {
+              console.error('Error fetching manual selections:', error);
+              // Fallback to including all tied contestants
+              return sorted.filter(avg => avg.average >= cutoffScore).map(avg => avg.contestant);
+            }
+
+          default:
+            // Fallback to including ties
+            return sorted.filter(avg => avg.average >= cutoffScore).map(avg => avg.contestant);
+        }
+      };
 
       if (separateGenders) {
         // Separate by gender
         const maleContestants = averages.filter(avg => avg.contestant.sex === 'MALE');
         const femaleContestants = averages.filter(avg => avg.contestant.sex === 'FEMALE');
 
-        // Sort and get top finalists for each gender
-        const topMales = maleContestants
-          .sort((a, b) => b.average - a.average)
-          .slice(0, finalistsCount)
-          .map(avg => avg.contestant);
-
-        const topFemales = femaleContestants
-          .sort((a, b) => b.average - a.average)
-          .slice(0, finalistsCount)
-          .map(avg => avg.contestant);
+        // Get finalists for each gender using the specified strategy
+        const topMales = await getFinalistsWithStrategy(maleContestants, finalistsCount, tieBreakingStrategy);
+        const topFemales = await getFinalistsWithStrategy(femaleContestants, finalistsCount, tieBreakingStrategy);
 
         return [...topMales, ...topFemales];
       } else {
-        // Overall top finalists
-        return averages
-          .sort((a, b) => b.average - a.average)
-          .slice(0, finalistsCount)
-          .map(avg => avg.contestant);
+        // Overall top finalists with strategy-based tie handling
+        return await getFinalistsWithStrategy(averages, finalistsCount, tieBreakingStrategy);
       }
     } catch (error) {
       console.error('Error determining finalists:', error);
@@ -151,7 +215,7 @@ export default function JudgeScorePage() {
 
       // Apply finalist filtering if in final phase and conditions are met
       if (eventData[0].currentPhase === 'FINAL' && eventData[0].hasTwoPhases && eventData[0].finalistsCount) {
-        const finalists = await determineFinalists(foundJudge.eventId, eventData[0].finalistsCount, eventData[0].separateGenders, allContestants);
+        const finalists = await determineFinalists(foundJudge.eventId, eventData[0].finalistsCount, eventData[0].separateGenders, allContestants, eventData[0].tieBreakingStrategy);
         setFilteredContestants(finalists);
       } else {
         setFilteredContestants(allContestants);
@@ -220,7 +284,7 @@ export default function JudgeScorePage() {
     if (!event || !contestants.length) return;
 
     if (event.currentPhase === 'FINAL' && event.hasTwoPhases && event.finalistsCount) {
-      determineFinalists(event.id, event.finalistsCount, event.separateGenders, contestants)
+      determineFinalists(event.id, event.finalistsCount, event.separateGenders, contestants, event.tieBreakingStrategy)
         .then(finalists => setFilteredContestants(finalists));
     } else {
       setFilteredContestants(contestants);

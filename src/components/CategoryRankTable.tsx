@@ -14,6 +14,7 @@ interface CategoryRankTableProps {
     finalistsCount: number;
     currentPhase: string;
     hasTwoPhases: boolean;
+    tieBreakingStrategy?: string;
   } | null;
 }
 

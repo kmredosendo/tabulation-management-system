@@ -26,13 +26,14 @@ interface Criteria {
 }
 
 interface ContestantBreakdownTableProps {
-  eventId: number;
+  eventId?: number;
   phase?: string;
   eventSettings?: {
     separateGenders: boolean;
     finalistsCount: number;
     currentPhase: string;
     hasTwoPhases: boolean;
+    tieBreakingStrategy?: string;
   } | null;
 }
 
@@ -57,46 +58,6 @@ export const ContestantBreakdownTable: React.FC<ContestantBreakdownTableProps> =
   }, [eventId, phase]);
 
   if (loading) return <div className="py-8 text-center">Loading...</div>;
-
-  // Function to calculate rankings for a group of contestants
-  const calculateRankings = (contestantGroup: Contestant[], scoreGroup: RawScore[], judgeGroup: { id: number; name: string; number: number }[], criteriaGroup: Criteria[]) => {
-    // Only use sub-criteria (criteria with parentId)
-    const subCriteriaIds = criteriaGroup.filter((c) => c.parentId).map((c) => c.id);
-
-    // For each judge and contestant, sum all sub-criteria scores
-    const judgeScores: Record<number, { contestantId: number; value: number }[]> = {};
-    judgeGroup.forEach((judge) => {
-      judgeScores[judge.id] = contestantGroup.map((c) => {
-        const total = scoreGroup
-          .filter((s) => s.judgeId === judge.id && s.contestantId === c.id && subCriteriaIds.includes(s.criteriaId))
-          .reduce((sum, s) => sum + s.value, 0);
-        return { contestantId: c.id, value: total };
-      });
-    });
-
-    // For each judge, compute ranks (dense ranking)
-    const judgeRanks: Record<number, Record<number, number>> = {};
-    judgeGroup.forEach((judge) => {
-      const arr = [...judgeScores[judge.id]];
-      arr.sort((a, b) => b.value - a.value);
-      let rank = 1;
-      for (let i = 0; i < arr.length; ) {
-        const tieValue = arr[i].value;
-        let tieEnd = i;
-        while (tieEnd + 1 < arr.length && arr[tieEnd + 1].value === tieValue) {
-          tieEnd++;
-        }
-        for (let j = i; j <= tieEnd; j++) {
-          if (!judgeRanks[judge.id]) judgeRanks[judge.id] = {};
-          judgeRanks[judge.id][arr[j].contestantId] = rank;
-        }
-        rank += (tieEnd - i + 1);
-        i = tieEnd + 1;
-      }
-    });
-
-    return judgeRanks;
-  };
 
   // Function to get eligible contestants for the current phase
   const getEligibleContestants = (allContestants: Contestant[], targetPhase: string) => {
