@@ -48,6 +48,7 @@ export default function JudgeScorePage() {
   const [scores, setScores] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
 
   // Theme toggle function
   const toggleTheme = () => {
@@ -194,6 +195,29 @@ export default function JudgeScorePage() {
     }
   }, []);
 
+  // Socket connection handlers
+  const handleConnect = useCallback(() => {
+    console.log("Socket connected successfully");
+    setConnectionStatus(prev => {
+      // Show success toast if we were previously disconnected
+      if (prev === 'disconnected') {
+        toast.success("Connection restored!");
+      }
+      return 'connected';
+    });
+  }, []);
+
+  const handleDisconnect = useCallback(() => {
+    console.log("Socket disconnected");
+    setConnectionStatus('disconnected');
+    toast.error("Connection lost. Trying to reconnect...");
+  }, []);
+
+  const handleConnecting = useCallback(() => {
+    console.log("Socket connecting");
+    setConnectionStatus('connecting');
+  }, []);
+
   useEffect(() => {
     async function fetchData() {
       // First fetch the judge to get eventId
@@ -259,15 +283,27 @@ export default function JudgeScorePage() {
       }
     };
 
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connecting', handleConnecting);
     socket.on('phase-changed', handlePhaseChanged);
     socket.on('judge-lock-changed', handleJudgeLockChanged);
 
+    // Check if socket is already connected when we set up listeners
+    if (socket.connected) {
+      console.log("Socket was already connected");
+      setConnectionStatus('connected');
+    }
+
     return () => {
       console.log("Cleaning up socket listeners");
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connecting', handleConnecting);
       socket.off('phase-changed', handlePhaseChanged);
       socket.off('judge-lock-changed', handleJudgeLockChanged);
     };
-  }, [event?.id, judgeId]);
+  }, [event?.id, judgeId, handleConnect, handleDisconnect, handleConnecting]);
 
   // Refetch criteria when phase changes
   useEffect(() => {
@@ -290,6 +326,72 @@ export default function JudgeScorePage() {
       setFilteredContestants(contestants);
     }
   }, [event, contestants, determineFinalists]);
+
+  // Handle browser close, navigation away, and page visibility changes
+  useEffect(() => {
+    if (!judgeId) return;
+
+    const handleBeforeUnload = async () => {
+      // Call logout API to ensure server-side cleanup
+      try {
+        await fetch(getApiUrl(`/api/admin/judges/${judgeId}/logout`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true // Important: ensures request completes even if page is closing
+        });
+      } catch (error) {
+        console.error('Error during beforeunload logout:', error);
+      }
+      disconnectJudgeSocket();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page became hidden (switched tabs, minimized, etc.)
+        console.log('Page became hidden - judge may have navigated away');
+        // Start a timer to logout if page stays hidden too long
+        setTimeout(() => {
+          if (document.hidden && judgeId) {
+            console.log('Page has been hidden for 2 minutes - logging out judge');
+            fetch(getApiUrl(`/api/admin/judges/${judgeId}/logout`), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" }
+            }).catch(console.error);
+            disconnectJudgeSocket();
+          }
+        }, 2 * 60 * 1000); // 2 minutes (reduced from 5)
+      } else {
+        // Page became visible again
+        console.log('Page became visible - judge returned');
+      }
+    };
+
+    const handlePageHide = async () => {
+      // Modern browsers prefer 'pagehide' over 'beforeunload'
+      try {
+        await fetch(getApiUrl(`/api/admin/judges/${judgeId}/logout`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true
+        });
+      } catch (error) {
+        console.error('Error during pagehide logout:', error);
+      }
+      disconnectJudgeSocket();
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      // Clean up event listeners
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [judgeId]);
 
   // Fetch and prefill existing scores for this judge/event
   useEffect(() => {
@@ -423,11 +525,18 @@ export default function JudgeScorePage() {
   // Logout handler
   const handleLogout = async () => {
     if (judgeId) {
-      await fetch(getApiUrl(`/api/admin/judges/${judgeId}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: false }),
-      });
+      // Call the logout API to ensure server-side cleanup
+      try {
+        await fetch(getApiUrl(`/api/admin/judges/${judgeId}/logout`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (error) {
+        console.error('Error during logout:', error);
+      }
+      
+      // Also disconnect the socket locally
+      disconnectJudgeSocket();
       const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
       window.location.href = basePath + "/";
     }
@@ -450,7 +559,31 @@ export default function JudgeScorePage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 flex justify-end gap-2">
+          <div className="flex-1 flex justify-end items-center gap-2">
+            {/* Connection Status Indicator */}
+            <div className="flex items-center gap-1 text-xs">
+              <div 
+                className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
+                  connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
+                  'bg-red-500'
+                }`}
+                title={
+                  connectionStatus === 'connected' ? 'Connected' :
+                  connectionStatus === 'connecting' ? 'Connecting...' :
+                  'Disconnected'
+                }
+              />
+              <span className={`${
+                connectionStatus === 'connected' ? 'text-green-600' : 
+                connectionStatus === 'connecting' ? 'text-yellow-600' : 
+                'text-red-600'
+              }`}>
+                {connectionStatus === 'connected' ? 'Online' : 
+                 connectionStatus === 'connecting' ? 'Connecting' : 
+                 'Offline'}
+              </span>
+            </div>
             <Button variant="outline" size="icon" onClick={toggleTheme}>
               {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </Button>

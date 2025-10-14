@@ -3,6 +3,7 @@
 import React from 'react';
 import { useRouter } from "next/navigation";
 import { getApiUrl } from "@/lib/api";
+import { useActiveJudges } from "@/lib/useActiveJudges";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
@@ -25,13 +26,7 @@ export default function Home() {
 	const [selectedEventId, setSelectedEventId] = useState<string>("");
 	const [judges, setJudges] = useState<Judge[]>([]);
 	const [selectedJudge, setSelectedJudge] = useState<string>("");
-	const [activeJudges, setActiveJudges] = useState<string[]>([]);
-	useEffect(() => {
-		fetch(getApiUrl("/api/active-judges"))
-			.then((res) => res.json())
-			.then((data) => setActiveJudges((data.activeJudges || []).map(String)))
-			.catch(() => setActiveJudges([]));
-	}, []);
+	const activeJudges = useActiveJudges(5000, true).map(String);
 	const router = useRouter();
 
 	useEffect(() => {
