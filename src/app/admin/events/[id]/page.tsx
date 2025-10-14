@@ -143,16 +143,25 @@ export default function EventDetailsPage() {
         
         if (!scoresData.scores || scoresData.scores.length === 0) return false; // No scores yet
         
-        // Calculate contestant averages (same logic as score page)
+        // Calculate contestant averages (using correct raw-scores API structure)
         const contestantScores: Record<number, { total: number; count: number; average: number; contestant: { id: number; name: string; sex: string; number?: number } }> = {};
         
-        scoresData.scores.forEach((score: { contestantId: number; value: number; contestant: { id: number; name: string; sex: string; number?: number } }) => {
+        // Create a lookup map for contestants from the API response
+        const contestantMap = new Map();
+        scoresData.contestants.forEach((contestant: { id: number; name: string; sex: string; number?: number }) => {
+          contestantMap.set(contestant.id, contestant);
+        });
+        
+        scoresData.scores.forEach((score: { contestantId: number; value: number; contestantName: string }) => {
+          const contestant = contestantMap.get(score.contestantId);
+          if (!contestant) return;
+          
           if (!contestantScores[score.contestantId]) {
             contestantScores[score.contestantId] = {
               total: 0,
               count: 0,
               average: 0,
-              contestant: score.contestant
+              contestant: contestant
             };
           }
           contestantScores[score.contestantId].total += score.value;
@@ -165,11 +174,12 @@ export default function EventDetailsPage() {
           data.average = data.count > 0 ? data.total / data.count : 0;
         });
 
-        const averages = Object.entries(contestantScores).map(([id, data]) => ({
-          id: parseInt(id),
-          average: data.average,
-          contestant: data.contestant
-        }));
+        const averages = Object.entries(contestantScores)
+          .map(([id, data]) => ({
+            id: parseInt(id),
+            average: data.average,
+            contestant: data.contestant
+          }));
 
         // Check for ties that actually require manual selection
         const checkForTies = (contestants: typeof averages, finalistsCount: number): boolean => {
@@ -204,7 +214,7 @@ export default function EventDetailsPage() {
           // Check ties for all contestants together
           hasTies = checkForTies(averages, event.finalistsCount);
         }
-
+        
         if (!hasTies) return false; // No ties to resolve
 
         // If there are ties, check if manual selections have been made
