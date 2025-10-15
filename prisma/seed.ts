@@ -15,6 +15,7 @@ async function main() {
       name: "Admin User",
       username: "admin",
       password,
+      createdBy: null, // Initial admin has no creator
     },
   });
   console.log("Seeded admin user: admin / admin123");

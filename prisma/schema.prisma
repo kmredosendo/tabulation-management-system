@@ -113,10 +113,14 @@ model Score {
 }
 
 model Admin {
-  id       Int    @id @default(autoincrement())
-  username String @unique
-  password String
-  name     String
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  createdBy Int?
+  creator   Admin?   @relation("CreatedBy", fields: [createdBy], references: [id])
+  createdUsers Admin[] @relation("CreatedBy")
 
   @@map("admin")
 }

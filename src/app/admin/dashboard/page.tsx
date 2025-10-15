@@ -10,7 +10,8 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { toast, Toaster } from "sonner";
 import { getApiUrl } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Gauge, Trophy, Edit, Trash2, Plus } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Gauge, Trophy, Edit, Trash2, Plus, Users, Key } from "lucide-react";
 
 type EventSummary = {
   id: number;
@@ -20,6 +21,18 @@ type EventSummary = {
   institutionName?: string;
   institutionAddress?: string;
   venue?: string;
+};
+
+type User = {
+  id: number;
+  username: string;
+  name: string;
+  createdAt: string;
+  createdBy: number | null;
+  creator: {
+    name: string;
+    username: string;
+  } | null;
 };
 
 export default function AdminDashboard() {
@@ -40,6 +53,28 @@ export default function AdminDashboard() {
   const [eventToDelete, setEventToDelete] = useState<EventSummary | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [deleteError, setDeleteError] = useState("");
+
+  // User management state
+  const [users, setUsers] = useState<User[]>([]);
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [changePasswordDialogOpen, setChangePasswordDialogOpen] = useState(false);
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
+  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newName, setNewName] = useState("");
+  const [createUserError, setCreateUserError] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editUserError, setEditUserError] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPasswordError, setResetPasswordError] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPasswordChange, setNewPasswordChange] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changePasswordError, setChangePasswordError] = useState("");
   const openEditDialog = async (event: EventSummary) => {
     setEditEvent(event);
     setEditEventName(event.name);
@@ -195,6 +230,220 @@ export default function AdminDashboard() {
     fetchEvents();
   }, [refreshEvents]);
 
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(getApiUrl("/api/admin/users"));
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateUserError("");
+
+    if (!newUsername || !newPassword || !newName) {
+      setCreateUserError("All fields are required");
+      return;
+    }
+
+    try {
+      const res = await fetch(getApiUrl("/api/admin/users"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newUsername,
+          password: newPassword,
+          name: newName,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("User created successfully");
+        setCreateUserDialogOpen(false);
+        setNewUsername("");
+        setNewPassword("");
+        setNewName("");
+        setCreateUserError("");
+        fetchUsers();
+      } else {
+        const data = await res.json();
+        setCreateUserError(data.error || "Failed to create user");
+        toast.error(data.error || "Failed to create user");
+      }
+    } catch (error) {
+      console.error("Error creating user:", error);
+      setCreateUserError("Failed to create user");
+      toast.error("Failed to create user");
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError("");
+
+    if (!currentPassword || !newPasswordChange || !confirmPassword) {
+      setChangePasswordError("All fields are required");
+      return;
+    }
+
+    if (newPasswordChange !== confirmPassword) {
+      setChangePasswordError("New passwords do not match");
+      return;
+    }
+
+    try {
+      const res = await fetch(getApiUrl("/api/admin/change-password"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword: newPasswordChange,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Password changed successfully");
+        setChangePasswordDialogOpen(false);
+        setCurrentPassword("");
+        setNewPasswordChange("");
+        setConfirmPassword("");
+        setChangePasswordError("");
+      } else {
+        const data = await res.json();
+        setChangePasswordError(data.error || "Failed to change password");
+        toast.error(data.error || "Failed to change password");
+      }
+    } catch (error) {
+      console.error("Error changing password:", error);
+      setChangePasswordError("Failed to change password");
+      toast.error("Failed to change password");
+    }
+  };
+
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    setEditUserError("");
+
+    try {
+      const res = await fetch(getApiUrl(`/api/admin/users/${selectedUser.id}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: editUsername,
+          name: editName,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("User updated successfully");
+        setEditUserDialogOpen(false);
+        setSelectedUser(null);
+        setEditUsername("");
+        setEditName("");
+        setEditUserError("");
+        fetchUsers();
+      } else {
+        const data = await res.json();
+        setEditUserError(data.error || "Failed to update user");
+        toast.error(data.error || "Failed to update user");
+      }
+    } catch (error) {
+      console.error("Error updating user:", error);
+      setEditUserError("Failed to update user");
+      toast.error("Failed to update user");
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    setResetPasswordError("");
+
+    if (!resetPassword) {
+      setResetPasswordError("Password is required");
+      return;
+    }
+
+    try {
+      const res = await fetch(getApiUrl(`/api/admin/users/${selectedUser.id}/reset-password`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newPassword: resetPassword,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Password reset successfully");
+        setResetPasswordDialogOpen(false);
+        setSelectedUser(null);
+        setResetPassword("");
+        setResetPasswordError("");
+      } else {
+        const data = await res.json();
+        setResetPasswordError(data.error || "Failed to reset password");
+        toast.error(data.error || "Failed to reset password");
+      }
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      setResetPasswordError("Failed to reset password");
+      toast.error("Failed to reset password");
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      const res = await fetch(getApiUrl(`/api/admin/users/${selectedUser.id}`), {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("User deleted successfully");
+        setDeleteUserDialogOpen(false);
+        setSelectedUser(null);
+        fetchUsers();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete user");
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast.error("Failed to delete user");
+    }
+  };
+
+  const openEditUserDialog = (user: User) => {
+    setSelectedUser(user);
+    setEditUsername(user.username);
+    setEditName(user.name);
+    setEditUserError("");
+    setEditUserDialogOpen(true);
+  };
+
+  const openResetPasswordDialog = (user: User) => {
+    setSelectedUser(user);
+    setResetPassword("");
+    setResetPasswordError("");
+    setResetPasswordDialogOpen(true);
+  };
+
+  const openDeleteUserDialog = (user: User) => {
+    setSelectedUser(user);
+    setDeleteUserDialogOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-muted flex items-start justify-center py-10 px-2 sm:px-4 h-[90vh]">
       {/* Main Content */}
@@ -205,13 +454,295 @@ export default function AdminDashboard() {
               <CardTitle className="flex items-center gap-2">
                 <Gauge className="w-5 h-5" /> Dashboard
               </CardTitle>
-              <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="default">
-                    <Plus className="w-4 h-4 mr-2" /> New Event
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md w-full">
+              <div className="flex gap-2">
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline">
+                      <Users className="w-4 h-4 mr-2" />
+                      Users
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="overflow-y-auto p-4">
+                    <SheetHeader>
+                      <SheetTitle className="flex items-center gap-2">
+                        <Users className="w-5 h-5" />
+                        User Management
+                      </SheetTitle>
+                    </SheetHeader>
+                    <div className="mt-6 space-y-6">
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <Dialog open={changePasswordDialogOpen} onOpenChange={setChangePasswordDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="flex-1">
+                              <Key className="w-4 h-4 mr-2" />
+                              Change Password
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2">
+                                <Key className="w-5 h-5" />
+                                Change Password
+                              </DialogTitle>
+                            </DialogHeader>
+                            <form onSubmit={handleChangePassword} className="space-y-4">
+                              <div>
+                                <label className="block text-sm font-medium mb-1">Current Password</label>
+                                <Input
+                                  type="password"
+                                  value={currentPassword}
+                                  onChange={(e) => setCurrentPassword(e.target.value)}
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium mb-1">New Password</label>
+                                <Input
+                                  type="password"
+                                  value={newPasswordChange}
+                                  onChange={(e) => setNewPasswordChange(e.target.value)}
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium mb-1">Confirm New Password</label>
+                                <Input
+                                  type="password"
+                                  value={confirmPassword}
+                                  onChange={(e) => setConfirmPassword(e.target.value)}
+                                  required
+                                />
+                              </div>
+                              {changePasswordError && (
+                                <p className="text-sm text-destructive">{changePasswordError}</p>
+                              )}
+                              <div className="flex justify-end gap-2">
+                                <DialogClose asChild>
+                                  <Button type="button" variant="outline">
+                                    Cancel
+                                  </Button>
+                                </DialogClose>
+                                <Button type="submit">Change Password</Button>
+                              </div>
+                            </form>
+                          </DialogContent>
+                        </Dialog>
+                        <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button size="sm" className="flex-1">
+                              <Plus className="w-4 h-4 mr-2" />
+                              Add User
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2">
+                                <Plus className="w-5 h-5" />
+                                Create New User
+                              </DialogTitle>
+                            </DialogHeader>
+                            <form onSubmit={handleCreateUser} className="space-y-4">
+                              <div>
+                                <label className="block text-sm font-medium mb-1">Full Name</label>
+                                <Input
+                                  type="text"
+                                  value={newName}
+                                  onChange={(e) => setNewName(e.target.value)}
+                                  placeholder="Enter full name"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium mb-1">Username</label>
+                                <Input
+                                  type="text"
+                                  value={newUsername}
+                                  onChange={(e) => setNewUsername(e.target.value)}
+                                  placeholder="Enter username"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium mb-1">Password</label>
+                                <Input
+                                  type="password"
+                                  value={newPassword}
+                                  onChange={(e) => setNewPassword(e.target.value)}
+                                  placeholder="Enter password"
+                                  required
+                                />
+                              </div>
+                              {createUserError && <p className="text-sm text-destructive">{createUserError}</p>}
+                              <div className="flex justify-end gap-2">
+                                <DialogClose asChild>
+                                  <Button type="button" variant="outline">
+                                    Cancel
+                                  </Button>
+                                </DialogClose>
+                                <Button type="submit">Create User</Button>
+                              </div>
+                            </form>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                      
+                      {/* Users List */}
+                      <div className="space-y-2">
+                        {users.length === 0 ? (
+                          <div className="text-center p-8 text-muted-foreground border rounded-lg">
+                            No users found
+                          </div>
+                        ) : (
+                          users.map((user) => (
+                            <div key={user.id} className="border rounded-lg p-3 hover:bg-muted/50 flex items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">{user.username}</div>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => openEditUserDialog(user)}
+                                  title="Edit user"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => openResetPasswordDialog(user)}
+                                  title="Reset password"
+                                >
+                                  <Key className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                  onClick={() => openDeleteUserDialog(user)}
+                                  title="Delete user"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Edit User Dialog */}
+                      <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+                        <DialogContent className="sm:max-w-[425px]">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <Edit className="w-5 h-5" />
+                              Edit User
+                            </DialogTitle>
+                          </DialogHeader>
+                          <form onSubmit={handleEditUser} className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium mb-1">Username</label>
+                              <Input
+                                type="text"
+                                value={editUsername}
+                                onChange={(e) => setEditUsername(e.target.value)}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium mb-1">Full Name</label>
+                              <Input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                required
+                              />
+                            </div>
+                            {editUserError && <p className="text-sm text-destructive">{editUserError}</p>}
+                            <div className="flex justify-end gap-2">
+                              <DialogClose asChild>
+                                <Button type="button" variant="outline">
+                                  Cancel
+                                </Button>
+                              </DialogClose>
+                              <Button type="submit">Save Changes</Button>
+                            </div>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* Reset Password Dialog */}
+                      <Dialog open={resetPasswordDialogOpen} onOpenChange={setResetPasswordDialogOpen}>
+                        <DialogContent className="sm:max-w-[425px]">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <Key className="w-5 h-5" />
+                              Reset Password for {selectedUser?.username}
+                            </DialogTitle>
+                          </DialogHeader>
+                          <form onSubmit={handleResetPassword} className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium mb-1">New Password</label>
+                              <Input
+                                type="password"
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                placeholder="Enter new password"
+                                required
+                              />
+                            </div>
+                            {resetPasswordError && <p className="text-sm text-destructive">{resetPasswordError}</p>}
+                            <div className="flex justify-end gap-2">
+                              <DialogClose asChild>
+                                <Button type="button" variant="outline">
+                                  Cancel
+                                </Button>
+                              </DialogClose>
+                              <Button type="submit">Reset Password</Button>
+                            </div>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* Delete User Dialog */}
+                      <AlertDialog open={deleteUserDialogOpen} onOpenChange={setDeleteUserDialogOpen}>
+                        <AlertDialogContent className="sm:max-w-[425px]">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                              <Trash2 className="w-5 h-5 text-destructive" />
+                              Delete User
+                            </AlertDialogTitle>
+                          </AlertDialogHeader>
+                          <div className="mb-4">
+                            Are you sure you want to delete user <span className="font-semibold">{selectedUser?.username}</span>?
+                            <br />
+                            <span className="text-destructive font-semibold">This action cannot be undone.</span>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <AlertDialogCancel asChild>
+                              <Button type="button" variant="outline">Cancel</Button>
+                            </AlertDialogCancel>
+                            <AlertDialogAction asChild>
+                              <Button type="button" variant="destructive" onClick={handleDeleteUser}>
+                                Delete
+                              </Button>
+                            </AlertDialogAction>
+                          </div>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="default">
+                      <Plus className="w-4 h-4 mr-2" /> New Event
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md w-full">
                   <DialogHeader>
                     <DialogTitle>New Event</DialogTitle>
                   </DialogHeader>
@@ -313,6 +844,7 @@ export default function AdminDashboard() {
                   </form>
                 </DialogContent>
               </Dialog>
+            </div>
             </div>
           </CardHeader>
           <CardContent className="overflow-y-auto h-[calc(90vh-180px)]">
