@@ -19,7 +19,8 @@ export async function POST(request: Request) {
         tieBreakingStrategy: true, 
         finalistsCount: true,
         currentPhase: true,
-        hasTwoPhases: true
+        hasTwoPhases: true,
+        separateGenders: true
       }
     });
 
@@ -35,22 +36,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Manual selection only available during preliminary phase" }, { status: 400 });
     }
 
-    if (contestantIds.length !== event.finalistsCount) {
-      return NextResponse.json({ 
-        error: `Must select exactly ${event.finalistsCount} finalists` 
-      }, { status: 400 });
-    }
-
     // Verify all contestants exist and belong to this event
     const contestants = await prisma.contestant.findMany({
       where: {
         id: { in: contestantIds },
         eventId: eventId
+      },
+      select: {
+        id: true,
+        sex: true
       }
     });
 
     if (contestants.length !== contestantIds.length) {
       return NextResponse.json({ error: "One or more contestants not found" }, { status: 400 });
+    }
+
+    // Validate selection based on gender separation
+    if (event.separateGenders) {
+      // For gender-separated events, each gender should have exactly finalistsCount selections
+      const maleContestants = contestants.filter(c => c.sex === 'MALE');
+      const femaleContestants = contestants.filter(c => c.sex === 'FEMALE');
+
+      if (maleContestants.length !== event.finalistsCount) {
+        return NextResponse.json({ 
+          error: `Must select exactly ${event.finalistsCount} male finalists (received ${maleContestants.length})` 
+        }, { status: 400 });
+      }
+
+      if (femaleContestants.length !== event.finalistsCount) {
+        return NextResponse.json({ 
+          error: `Must select exactly ${event.finalistsCount} female finalists (received ${femaleContestants.length})` 
+        }, { status: 400 });
+      }
+
+      // Total should be 2 * finalistsCount for gender-separated events
+      if (contestantIds.length !== event.finalistsCount * 2) {
+        return NextResponse.json({ 
+          error: `Must select exactly ${event.finalistsCount * 2} finalists total for gender-separated events` 
+        }, { status: 400 });
+      }
+    } else {
+      // For non-gender-separated events, total should be finalistsCount
+      if (contestantIds.length !== event.finalistsCount) {
+        return NextResponse.json({ 
+          error: `Must select exactly ${event.finalistsCount} finalists` 
+        }, { status: 400 });
+      }
     }
 
     // Delete existing manual selections for this event

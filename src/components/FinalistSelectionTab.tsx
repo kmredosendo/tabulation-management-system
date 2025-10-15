@@ -86,37 +86,94 @@ export function FinalistSelectionTab({ event, onSuccess }: FinalistSelectionTabP
           rank: 0 // Will be calculated after sorting
         }));
 
-        // Sort by average score (descending)
-        contestantsWithScores.sort((a, b) => b.averageScore - a.averageScore);
+        if (event.separateGenders) {
+          // Handle gender separation - calculate ranks and selection per gender
+          const maleContestants = contestantsWithScores.filter(c => c.contestant.sex === 'MALE');
+          const femaleContestants = contestantsWithScores.filter(c => c.contestant.sex === 'FEMALE');
 
-        // Assign ranks
-        let currentRank = 1;
-        for (let i = 0; i < contestantsWithScores.length; i++) {
-          if (i > 0 && contestantsWithScores[i].averageScore !== contestantsWithScores[i - 1].averageScore) {
-            currentRank = i + 1;
-          }
-          contestantsWithScores[i].rank = currentRank;
-        }
+          // Sort and rank each gender group separately
+          const processGenderGroup = (contestants: ContestantWithScore[]) => {
+            contestants.sort((a, b) => b.averageScore - a.averageScore);
+            let currentRank = 1;
+            for (let i = 0; i < contestants.length; i++) {
+              if (i > 0 && contestants[i].averageScore !== contestants[i - 1].averageScore) {
+                currentRank = i + 1;
+              }
+              contestants[i].rank = currentRank;
+            }
+            return contestants;
+          };
 
-        setContestants(contestantsWithScores);
+          const rankedMales = processGenderGroup(maleContestants);
+          const rankedFemales = processGenderGroup(femaleContestants);
 
-        // Identify contestants that need manual selection (ties at the cutoff)
-        if (contestantsWithScores.length > event.finalistsCount) {
-          const cutoffScore = contestantsWithScores[event.finalistsCount - 1].averageScore;
-          const tied = contestantsWithScores.filter(c => c.averageScore === cutoffScore);
-          
-          if (tied.length > 1) {
-            setTiedContestants(tied);
-            // Auto-select non-tied qualifiers
-            const autoQualified = contestantsWithScores.filter(c => c.averageScore > cutoffScore);
-            setSelectedFinalists(autoQualified.map(c => c.contestant.id));
-          } else {
-            // No ties, auto-select top finalists
-            setSelectedFinalists(contestantsWithScores.slice(0, event.finalistsCount).map(c => c.contestant.id));
-          }
+          // Combine all contestants with proper ranks
+          const allRanked = [...rankedMales, ...rankedFemales];
+          setContestants(allRanked);
+
+          // Find ties for each gender separately
+          const allTied: ContestantWithScore[] = [];
+          const autoSelected: number[] = [];
+
+          const processGenderTies = (genderContestants: ContestantWithScore[]) => {
+            if (genderContestants.length > event.finalistsCount) {
+              const cutoffScore = genderContestants[event.finalistsCount - 1].averageScore;
+              const tied = genderContestants.filter(c => c.averageScore === cutoffScore);
+              
+              if (tied.length > 1) {
+                allTied.push(...tied);
+                // Auto-select non-tied qualifiers for this gender
+                const autoQualified = genderContestants.filter(c => c.averageScore > cutoffScore);
+                autoSelected.push(...autoQualified.map(c => c.contestant.id));
+              } else {
+                // No ties, auto-select top finalists for this gender
+                autoSelected.push(...genderContestants.slice(0, event.finalistsCount).map(c => c.contestant.id));
+              }
+            } else {
+              // All contestants of this gender qualify
+              autoSelected.push(...genderContestants.map(c => c.contestant.id));
+            }
+          };
+
+          processGenderTies(rankedMales);
+          processGenderTies(rankedFemales);
+
+          setTiedContestants(allTied);
+          setSelectedFinalists(autoSelected);
+
         } else {
-          // All contestants qualify
-          setSelectedFinalists(contestantsWithScores.map(c => c.contestant.id));
+          // Original logic for non-gender-separated events
+          contestantsWithScores.sort((a, b) => b.averageScore - a.averageScore);
+
+          // Assign ranks
+          let currentRank = 1;
+          for (let i = 0; i < contestantsWithScores.length; i++) {
+            if (i > 0 && contestantsWithScores[i].averageScore !== contestantsWithScores[i - 1].averageScore) {
+              currentRank = i + 1;
+            }
+            contestantsWithScores[i].rank = currentRank;
+          }
+
+          setContestants(contestantsWithScores);
+
+          // Identify contestants that need manual selection (ties at the cutoff)
+          if (contestantsWithScores.length > event.finalistsCount) {
+            const cutoffScore = contestantsWithScores[event.finalistsCount - 1].averageScore;
+            const tied = contestantsWithScores.filter(c => c.averageScore === cutoffScore);
+            
+            if (tied.length > 1) {
+              setTiedContestants(tied);
+              // Auto-select non-tied qualifiers
+              const autoQualified = contestantsWithScores.filter(c => c.averageScore > cutoffScore);
+              setSelectedFinalists(autoQualified.map(c => c.contestant.id));
+            } else {
+              // No ties, auto-select top finalists
+              setSelectedFinalists(contestantsWithScores.slice(0, event.finalistsCount).map(c => c.contestant.id));
+            }
+          } else {
+            // All contestants qualify
+            setSelectedFinalists(contestantsWithScores.map(c => c.contestant.id));
+          }
         }
 
         // Load existing manual selections if they exist
@@ -141,7 +198,7 @@ export function FinalistSelectionTab({ event, onSuccess }: FinalistSelectionTabP
     };
 
     fetchData();
-  }, [event.id, event.finalistsCount]);
+  }, [event.id, event.finalistsCount, event.separateGenders]);
 
   const handleFinalistToggle = (contestantId: number) => {
     const contestant = contestants.find(c => c.contestant.id === contestantId);
@@ -159,30 +216,65 @@ export function FinalistSelectionTab({ event, onSuccess }: FinalistSelectionTabP
       if (prev.includes(contestantId)) {
         return prev.filter(id => id !== contestantId);
       } else {
-        // Check if we're at the limit
-        const nonTiedSelected = prev.filter(id => 
-          !tiedContestants.some(tc => tc.contestant.id === id)
-        );
-        const tiedSelected = prev.filter(id => 
-          tiedContestants.some(tc => tc.contestant.id === id)
-        );
+        if (event.separateGenders) {
+          // For gender-separated events, check limits per gender
+          const contestantGender = contestant.contestant.sex;
+          
+          // Count current selections for this gender
+          const currentGenderSelections = prev.filter(id => {
+            const c = contestants.find(cont => cont.contestant.id === id);
+            return c?.contestant.sex === contestantGender;
+          }).length;
 
-        const slotsRemaining = event.finalistsCount - nonTiedSelected.length - tiedSelected.length;
-        
-        if (slotsRemaining > 0) {
+          if (currentGenderSelections >= event.finalistsCount) {
+            toast.error(`You can only select ${event.finalistsCount} ${contestantGender?.toLowerCase() || 'contestants'} finalists`);
+            return prev;
+          }
+
           return [...prev, contestantId];
         } else {
-          toast.error(`You can only select ${event.finalistsCount} finalists total`);
-          return prev;
+          // Original logic for non-gender-separated events
+          const nonTiedSelected = prev.filter(id => 
+            !tiedContestants.some(tc => tc.contestant.id === id)
+          );
+          const tiedSelected = prev.filter(id => 
+            tiedContestants.some(tc => tc.contestant.id === id)
+          );
+
+          const slotsRemaining = event.finalistsCount - nonTiedSelected.length - tiedSelected.length;
+          
+          if (slotsRemaining > 0) {
+            return [...prev, contestantId];
+          } else {
+            toast.error(`You can only select ${event.finalistsCount} finalists total`);
+            return prev;
+          }
         }
       }
     });
   };
 
   const handleSaveFinalists = async () => {
-    if (selectedFinalists.length !== event.finalistsCount) {
-      toast.error(`Please select exactly ${event.finalistsCount} finalists`);
-      return;
+    if (event.separateGenders) {
+      // Validate gender separation: each gender should have exactly finalistsCount selections
+      const selectedContestants = contestants.filter(c => selectedFinalists.includes(c.contestant.id));
+      const maleSelections = selectedContestants.filter(c => c.contestant.sex === 'MALE');
+      const femaleSelections = selectedContestants.filter(c => c.contestant.sex === 'FEMALE');
+
+      if (maleSelections.length !== event.finalistsCount) {
+        toast.error(`Please select exactly ${event.finalistsCount} male finalists (currently: ${maleSelections.length})`);
+        return;
+      }
+      if (femaleSelections.length !== event.finalistsCount) {
+        toast.error(`Please select exactly ${event.finalistsCount} female finalists (currently: ${femaleSelections.length})`);
+        return;
+      }
+    } else {
+      // Original validation for non-gender-separated events
+      if (selectedFinalists.length !== event.finalistsCount) {
+        toast.error(`Please select exactly ${event.finalistsCount} finalists`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -254,13 +346,37 @@ export function FinalistSelectionTab({ event, onSuccess }: FinalistSelectionTabP
           <div className="flex items-center gap-2">
             <Trophy className="w-4 h-4 text-yellow-500" />
             <h2 className="text-base font-semibold">Manual Finalist Selection</h2>
-            <div className="text-sm text-gray-600">
-              ({selectedFinalists.length}/{event.finalistsCount} selected)
-            </div>
+            {event.separateGenders ? (
+              <div className="text-sm text-gray-600">
+                {(() => {
+                  const selectedContestants = contestants.filter(c => selectedFinalists.includes(c.contestant.id));
+                  const maleCount = selectedContestants.filter(c => c.contestant.sex === 'MALE').length;
+                  const femaleCount = selectedContestants.filter(c => c.contestant.sex === 'FEMALE').length;
+                  return `(Male: ${maleCount}/${event.finalistsCount}, Female: ${femaleCount}/${event.finalistsCount})`;
+                })()}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">
+                ({selectedFinalists.length}/{event.finalistsCount} selected)
+              </div>
+            )}
           </div>
           <Button 
             onClick={handleSaveFinalists}
-            disabled={selectedFinalists.length !== event.finalistsCount || saving}
+            disabled={(() => {
+              if (saving) return true;
+              
+              if (event.separateGenders) {
+                // For gender-separated events, check if both genders have correct counts
+                const selectedContestants = contestants.filter(c => selectedFinalists.includes(c.contestant.id));
+                const maleCount = selectedContestants.filter(c => c.contestant.sex === 'MALE').length;
+                const femaleCount = selectedContestants.filter(c => c.contestant.sex === 'FEMALE').length;
+                return maleCount !== event.finalistsCount || femaleCount !== event.finalistsCount;
+              } else {
+                // For non-gender-separated events, use original logic
+                return selectedFinalists.length !== event.finalistsCount;
+              }
+            })()}
             size="sm"
           >
             {saving ? 'Saving...' : 'Save Selection'}
@@ -269,54 +385,126 @@ export function FinalistSelectionTab({ event, onSuccess }: FinalistSelectionTabP
         
         {tiedContestants.length > 0 && (
           <div className="p-2 bg-yellow-50 border-l-4 border-yellow-400 rounded text-xs">
-            <p className="text-yellow-800">
-              <strong>Tie at rank {tiedContestants[0].rank}:</strong> Select {event.finalistsCount - nonTiedSelected} more from tied contestants.
-            </p>
+            {event.separateGenders ? (
+              <div className="text-yellow-800">
+                <strong>Ties detected:</strong> Select finalists from tied contestants for each gender.
+                {(() => {
+                  const maleTied = tiedContestants.filter(c => c.contestant.sex === 'MALE');
+                  const femaleTied = tiedContestants.filter(c => c.contestant.sex === 'FEMALE');
+                  return (
+                    <div className="mt-1">
+                      {maleTied.length > 0 && <div>• Male contestants tied at rank {maleTied[0].rank}</div>}
+                      {femaleTied.length > 0 && <div>• Female contestants tied at rank {femaleTied[0].rank}</div>}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <p className="text-yellow-800">
+                <strong>Tie at rank {tiedContestants[0].rank}:</strong> Select {event.finalistsCount - nonTiedSelected} more from tied contestants.
+              </p>
+            )}
           </div>
         )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-2" style={{ maxHeight: 'calc(90vh - 200px)' }}>
-        <div className="space-y-1">
-          {contestants.map((contestant) => {
-            const status = getContestantStatus(contestant);
-            const isTied = tiedContestants.some(tc => tc.contestant.id === contestant.contestant.id);
-            const isSelected = selectedFinalists.includes(contestant.contestant.id);
-            
-            return (
-              <div 
-                key={contestant.contestant.id} 
-                className={`flex items-center justify-between p-2 border rounded cursor-pointer transition-all hover:bg-gray-50 ${
-                  isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white'
-                } ${!isTied && status.status !== 'auto' ? 'opacity-60' : ''}`}
-                onClick={() => handleFinalistToggle(contestant.contestant.id)}
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="text-lg font-bold text-gray-900 min-w-[3rem]">#{contestant.contestant.number}</div>
-                    <div className="text-sm text-gray-500">R{contestant.rank}</div>
+        {event.separateGenders ? (
+          // Render contestants grouped by gender
+          <div className="space-y-4">
+            {[
+              { gender: 'MALE', label: 'Male Contestants', contestants: contestants.filter(c => c.contestant.sex === 'MALE') },
+              { gender: 'FEMALE', label: 'Female Contestants', contestants: contestants.filter(c => c.contestant.sex === 'FEMALE') }
+            ].map(({ gender, label, contestants: genderContestants }) => (
+              genderContestants.length > 0 && (
+                <div key={gender}>
+                  <h3 className="font-semibold text-sm mb-2 text-gray-700 border-b pb-1">{label}</h3>
+                  <div className="space-y-1">
+                    {genderContestants.map((contestant) => {
+                      const status = getContestantStatus(contestant);
+                      const isTied = tiedContestants.some(tc => tc.contestant.id === contestant.contestant.id);
+                      const isSelected = selectedFinalists.includes(contestant.contestant.id);
+                      
+                      return (
+                        <div 
+                          key={contestant.contestant.id} 
+                          className={`flex items-center justify-between p-2 border rounded cursor-pointer transition-all hover:bg-gray-50 ${
+                            isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white'
+                          } ${!isTied && status.status !== 'auto' ? 'opacity-60' : ''}`}
+                          onClick={() => handleFinalistToggle(contestant.contestant.id)}
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className="text-lg font-bold text-gray-900 min-w-[3rem]">#{contestant.contestant.number}</div>
+                              <div className="text-sm text-gray-500">R{contestant.rank}</div>
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{contestant.contestant.name}</div>
+                              <div className="text-xs text-gray-600">
+                                Avg: {contestant.averageScore.toFixed(2)} | Total: {contestant.totalScore.toFixed(1)}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${status.color}`}>
+                              {status.status === 'auto' ? 'Auto' : 
+                               status.status === 'manual' ? 'Selected' :
+                               status.status === 'available' ? 'Available' : 'Out'}
+                            </span>
+                            {isSelected && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">{contestant.contestant.name}</div>
-                    <div className="text-xs text-gray-600">
-                      Avg: {contestant.averageScore.toFixed(2)} | Total: {contestant.totalScore.toFixed(1)}
-                      {contestant.contestant.sex && <span className="ml-1">({contestant.contestant.sex})</span>}
+                </div>
+              )
+            ))}
+          </div>
+        ) : (
+          // Original single list for non-gender-separated events
+          <div className="space-y-1">
+            {contestants.map((contestant) => {
+              const status = getContestantStatus(contestant);
+              const isTied = tiedContestants.some(tc => tc.contestant.id === contestant.contestant.id);
+              const isSelected = selectedFinalists.includes(contestant.contestant.id);
+              
+              return (
+                <div 
+                  key={contestant.contestant.id} 
+                  className={`flex items-center justify-between p-2 border rounded cursor-pointer transition-all hover:bg-gray-50 ${
+                    isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white'
+                  } ${!isTied && status.status !== 'auto' ? 'opacity-60' : ''}`}
+                  onClick={() => handleFinalistToggle(contestant.contestant.id)}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="text-lg font-bold text-gray-900 min-w-[3rem]">#{contestant.contestant.number}</div>
+                      <div className="text-sm text-gray-500">R{contestant.rank}</div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">{contestant.contestant.name}</div>
+                      <div className="text-xs text-gray-600">
+                        Avg: {contestant.averageScore.toFixed(2)} | Total: {contestant.totalScore.toFixed(1)}
+                        {contestant.contestant.sex && <span className="ml-1">({contestant.contestant.sex})</span>}
+                      </div>
                     </div>
                   </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${status.color}`}>
+                      {status.status === 'auto' ? 'Auto' : 
+                       status.status === 'manual' ? 'Selected' :
+                       status.status === 'available' ? 'Available' : 'Out'}
+                    </span>
+                    {isSelected && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                  </div>
                 </div>
-                
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${status.color}`}>
-                    {status.status === 'auto' ? 'Auto' : 
-                     status.status === 'manual' ? 'Selected' :
-                     status.status === 'available' ? 'Available' : 'Out'}
-                  </span>
-                  {isSelected && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
