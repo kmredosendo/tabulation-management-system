@@ -883,14 +883,6 @@ export default function AdminDashboard() {
                             <span>{event.name}</span>
                           </CardTitle>
                         </div>
-                        <span
-                          className={`absolute top-1 right-1 w-2 h-2 rounded-full
-                            ${event.status && event.status.toLowerCase() === 'active'
-                              ? 'bg-green-500'
-                              : 'bg-gray-300'}
-                          `}
-                          title={event.status ? event.status.charAt(0).toUpperCase() + event.status.slice(1) : ''}
-                        ></span>
                         <div className="mt-0.5">
                           <span className="text-xs text-muted-foreground">
                             {new Date(event.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
