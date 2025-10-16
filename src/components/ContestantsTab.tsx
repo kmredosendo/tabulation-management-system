@@ -203,20 +203,20 @@ export function ContestantsTab({ event }: ContestantsTabProps) {
               <form onSubmit={handleAddContestant} className="space-y-4">
                 <div>
                   <Input
-                    placeholder="Number"
-                    type="number"
-                    value={newContestantNumber}
-                    onChange={e => setNewContestantNumber(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <Input
                     placeholder="Name"
                     value={newContestantName}
                     onChange={e => setNewContestantName(e.target.value)}
                     required
                     ref={contestantNameInputRef}
+                  />
+                </div>
+                <div>
+                  <Input
+                    placeholder="Number"
+                    type="number"
+                    value={newContestantNumber}
+                    onChange={e => setNewContestantNumber(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
@@ -321,18 +321,18 @@ export function ContestantsTab({ event }: ContestantsTabProps) {
           <form onSubmit={handleEditContestant} className="space-y-4">
             <div>
               <Input
-                placeholder="Number"
-                type="number"
-                value={editContestantNumber}
-                onChange={e => setEditContestantNumber(e.target.value)}
+                placeholder="Name"
+                value={editContestantName}
+                onChange={e => setEditContestantName(e.target.value)}
                 required
               />
             </div>
             <div>
               <Input
-                placeholder="Name"
-                value={editContestantName}
-                onChange={e => setEditContestantName(e.target.value)}
+                placeholder="Number"
+                type="number"
+                value={editContestantNumber}
+                onChange={e => setEditContestantNumber(e.target.value)}
                 required
               />
             </div>

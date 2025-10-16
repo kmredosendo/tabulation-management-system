@@ -179,20 +179,20 @@ export function JudgesTab({ event, judges, judgesLoading, onRefreshJudges, activ
               <form onSubmit={handleAddJudge} className="space-y-4">
                 <div>
                   <Input
-                    placeholder="Number"
-                    type="number"
-                    value={newJudgeNumber}
-                    onChange={e => setNewJudgeNumber(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <Input
                     placeholder="Name"
                     value={newJudgeName}
                     onChange={e => setNewJudgeName(e.target.value)}
                     required
                     ref={judgeNameInputRef}
+                  />
+                </div>
+                <div>
+                  <Input
+                    placeholder="Number"
+                    type="number"
+                    value={newJudgeNumber}
+                    onChange={e => setNewJudgeNumber(e.target.value)}
+                    required
                   />
                 </div>
                 {addJudgeError && (
@@ -279,18 +279,18 @@ export function JudgesTab({ event, judges, judgesLoading, onRefreshJudges, activ
           <form onSubmit={handleEditJudge} className="space-y-4">
             <div>
               <Input
-                placeholder="Number"
-                type="number"
-                value={editJudgeNumber}
-                onChange={e => setEditJudgeNumber(e.target.value)}
+                placeholder="Name"
+                value={editJudgeName}
+                onChange={e => setEditJudgeName(e.target.value)}
                 required
               />
             </div>
             <div>
               <Input
-                placeholder="Name"
-                value={editJudgeName}
-                onChange={e => setEditJudgeName(e.target.value)}
+                placeholder="Number"
+                type="number"
+                value={editJudgeNumber}
+                onChange={e => setEditJudgeNumber(e.target.value)}
                 required
               />
             </div>
