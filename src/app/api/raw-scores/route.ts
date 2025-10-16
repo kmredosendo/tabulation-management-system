@@ -18,6 +18,10 @@ export async function GET(req: NextRequest) {
         institutionName: true,
         institutionAddress: true,
         venue: true,
+        separateGenders: true,
+        hasTwoPhases: true,
+        currentPhase: true,
+        finalistsCount: true,
       },
     });
   } else {
@@ -31,6 +35,10 @@ export async function GET(req: NextRequest) {
         institutionName: true,
         institutionAddress: true,
         venue: true,
+        separateGenders: true,
+        hasTwoPhases: true,
+        currentPhase: true,
+        finalistsCount: true,
       },
     });
   }
