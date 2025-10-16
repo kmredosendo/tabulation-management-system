@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { name, date, status, institutionName, institutionAddress, venue, separateGenders, finalistsCount, hasTwoPhases, tieBreakingStrategy } = await req.json();
+  const { name, date, status, institutionName, institutionAddress, venue, separateGenders, separateTalent, finalistsCount, hasTwoPhases, tieBreakingStrategy } = await req.json();
   const { id } = await params;
   if (!name || !date || !id) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -31,6 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       venue,
       ...(status && { status }),
       ...(separateGenders !== undefined && { separateGenders }),
+      ...(separateTalent !== undefined && { separateTalent }),
       ...(finalistsCount !== undefined && { finalistsCount }),
       ...(hasTwoPhases !== undefined && { hasTwoPhases }),
       ...(tieBreakingStrategy && { tieBreakingStrategy })

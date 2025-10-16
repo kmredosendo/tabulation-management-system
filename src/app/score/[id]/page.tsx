@@ -40,7 +40,7 @@ interface Score {
 export default function JudgeScorePage() {
   const params = useParams();
   const judgeId = params?.id;
-  const [event, setEvent] = useState<{ id: number; name: string; currentPhase: string; separateGenders: boolean; hasTwoPhases: boolean; finalistsCount: number | null; tieBreakingStrategy?: string } | null>(null);
+  const [event, setEvent] = useState<{ id: number; name: string; currentPhase: string; separateGenders: boolean; separateTalent: boolean; hasTwoPhases: boolean; finalistsCount: number | null; tieBreakingStrategy?: string } | null>(null);
   const [judge, setJudge] = useState<{ id: number; name: string; number: number; lockedPreliminary: boolean; lockedFinal: boolean } | null>(null);
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [filteredContestants, setFilteredContestants] = useState<Contestant[]>([]);
@@ -49,6 +49,7 @@ export default function JudgeScorePage() {
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [adminEncodedTalentCriteria, setAdminEncodedTalentCriteria] = useState<Set<number>>(new Set());
 
   // Theme toggle function
   const toggleTheme = () => {
@@ -412,6 +413,50 @@ export default function JudgeScorePage() {
     // Only run when judgeId, event, or phase changes
   }, [judgeId, event?.id, event?.currentPhase]);
 
+  // Check for admin-encoded talent scores when event has separateTalent enabled
+  useEffect(() => {
+    if (!judgeId || !event?.id || !event?.separateTalent) {
+      setAdminEncodedTalentCriteria(new Set());
+      return;
+    }
+    
+    async function checkAdminTalentScores() {
+      if (!event) return;
+      try {
+        const res = await fetch(
+          getApiUrl(`/api/admin/talent-scores?judgeId=${judgeId}&eventId=${event.id}&phase=${event.currentPhase}`)
+        );
+        
+        if (res.ok) {
+          const data = await res.json();
+          
+          if (data.scores && data.scores.length > 0) {
+            // Admin has encoded talent scores for this judge
+            // Get all sub-criteria IDs from talent criteria
+            const talentSubCriteriaIds = new Set<number>();
+            
+            if (data.criteria && data.criteria.length > 0) {
+              data.criteria.forEach((criterion: { subCriterias: Array<{ id: number }> }) => {
+                criterion.subCriterias.forEach((sub) => {
+                  talentSubCriteriaIds.add(sub.id);
+                });
+              });
+            }
+            
+            setAdminEncodedTalentCriteria(talentSubCriteriaIds);
+          } else {
+            setAdminEncodedTalentCriteria(new Set());
+          }
+        }
+      } catch (error) {
+        console.error("Error checking admin talent scores:", error);
+        setAdminEncodedTalentCriteria(new Set());
+      }
+    }
+    
+    checkAdminTalentScores();
+  }, [judgeId, event]);
+
   // Auto set value for auto sub-criteria
   useEffect(() => {
     // Only run after contestants and criteria are loaded
@@ -693,7 +738,7 @@ export default function JudgeScorePage() {
                                     handleScoreChange(contestant.id, sub.id, v);
                                   }}
                                   required={!sub.autoAssignToAllContestants}
-                                  disabled={sub.autoAssignToAllContestants || isJudgeLocked()}
+                                  disabled={sub.autoAssignToAllContestants || isJudgeLocked() || adminEncodedTalentCriteria.has(sub.id)}
                                 />
                               </td>
                             ))
@@ -782,7 +827,7 @@ export default function JudgeScorePage() {
                                     handleScoreChange(contestant.id, sub.id, v);
                                   }}
                                   required={!sub.autoAssignToAllContestants}
-                                  disabled={sub.autoAssignToAllContestants || isJudgeLocked()}
+                                  disabled={sub.autoAssignToAllContestants || isJudgeLocked() || adminEncodedTalentCriteria.has(sub.id)}
                                 />
                               </td>
                             ))

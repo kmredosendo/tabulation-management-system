@@ -19,6 +19,7 @@ model Event {
   currentPhase Phase      @default(PRELIMINARY)
   hasTwoPhases Boolean    @default(false)
   separateGenders Boolean @default(false)
+  separateTalent Boolean  @default(false)
   finalistsCount Int       @default(0)
   tieBreakingStrategy TieBreakingStrategy @default(INCLUDE_TIES)
   contestants Contestant[]

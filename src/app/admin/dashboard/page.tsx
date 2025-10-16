@@ -45,6 +45,7 @@ export default function AdminDashboard() {
   const [editVenue, setEditVenue] = useState("");
   const [editHasTwoPhases, setEditHasTwoPhases] = useState(false);
   const [editSeparateGenders, setEditSeparateGenders] = useState(false);
+  const [editSeparateTalent, setEditSeparateTalent] = useState(false);
   const [editFinalistsCount, setEditFinalistsCount] = useState("");
   const [editTieBreakingStrategy, setEditTieBreakingStrategy] = useState("INCLUDE_TIES");
   const [editFormError, setEditFormError] = useState("");
@@ -90,6 +91,7 @@ export default function AdminDashboard() {
         const fullEvent = await res.json();
         setEditHasTwoPhases(fullEvent.hasTwoPhases !== undefined ? fullEvent.hasTwoPhases : false);
         setEditSeparateGenders(fullEvent.separateGenders || false);
+        setEditSeparateTalent(fullEvent.separateTalent || false);
         setEditFinalistsCount(fullEvent.finalistsCount ? fullEvent.finalistsCount.toString() : "");
         setEditTieBreakingStrategy(fullEvent.tieBreakingStrategy || "INCLUDE_TIES");
       }
@@ -97,6 +99,7 @@ export default function AdminDashboard() {
       console.error("Failed to fetch event details:", error);
       setEditHasTwoPhases(false);
       setEditSeparateGenders(false);
+      setEditSeparateTalent(false);
       setEditFinalistsCount("");
       setEditTieBreakingStrategy("INCLUDE_TIES");
     }
@@ -120,6 +123,7 @@ export default function AdminDashboard() {
         venue: editVenue,
         hasTwoPhases: editHasTwoPhases,
         separateGenders: editSeparateGenders,
+        separateTalent: editSeparateTalent,
         finalistsCount: editFinalistsCount ? parseInt(editFinalistsCount) : undefined,
         tieBreakingStrategy: editTieBreakingStrategy
       }),
@@ -177,6 +181,7 @@ export default function AdminDashboard() {
   const [newVenue, setNewVenue] = useState("");
   const [newHasTwoPhases, setNewHasTwoPhases] = useState(false);
   const [newSeparateGenders, setNewSeparateGenders] = useState(false);
+  const [newSeparateTalent, setNewSeparateTalent] = useState(false);
   const [newFinalistsCount, setNewFinalistsCount] = useState("");
   const [newTieBreakingStrategy, setNewTieBreakingStrategy] = useState("INCLUDE_TIES");
   const [formError, setFormError] = useState("");
@@ -194,6 +199,7 @@ export default function AdminDashboard() {
         venue: newVenue,
         hasTwoPhases: newHasTwoPhases,
         separateGenders: newSeparateGenders,
+        separateTalent: newSeparateTalent,
         finalistsCount: newFinalistsCount ? parseInt(newFinalistsCount) : undefined,
         tieBreakingStrategy: newTieBreakingStrategy
       }),
@@ -207,6 +213,7 @@ export default function AdminDashboard() {
       setNewVenue("");
       setNewHasTwoPhases(false);
       setNewSeparateGenders(false);
+      setNewSeparateTalent(false);
       setNewFinalistsCount("");
       setNewTieBreakingStrategy("INCLUDE_TIES");
       setFormError("");
@@ -826,6 +833,16 @@ export default function AdminDashboard() {
                         Separate judging by gender (Male/Female)
                       </label>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="separate-talent"
+                        checked={newSeparateTalent}
+                        onCheckedChange={setNewSeparateTalent}
+                      />
+                      <label htmlFor="separate-talent" className="text-sm font-medium">
+                        Talent portion held separately (encode scores via admin)
+                      </label>
+                    </div>
                     <div>
                       <Input
                         type="date"
@@ -1005,6 +1022,16 @@ export default function AdminDashboard() {
                                   />
                                   <label htmlFor={`edit-separate-genders-${event.id}`} className="text-sm font-medium">
                                     Separate judging by gender (Male/Female)
+                                  </label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Switch
+                                    id={`edit-separate-talent-${event.id}`}
+                                    checked={editSeparateTalent}
+                                    onCheckedChange={setEditSeparateTalent}
+                                  />
+                                  <label htmlFor={`edit-separate-talent-${event.id}`} className="text-sm font-medium">
+                                    Talent portion held separately (encode scores via admin)
                                   </label>
                                 </div>
                                 <div>

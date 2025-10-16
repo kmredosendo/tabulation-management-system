@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog";
 import { ClipboardList, Eye, Trophy } from "lucide-react";
 import { FinalistSelectionTab } from "@/components/FinalistSelectionTab";
+import { TalentScoreSheet } from "@/components/TalentScoreSheet";
 
 type Judge = {
   id: number;
@@ -27,6 +28,7 @@ type Event = {
   currentPhase: string;
   hasTwoPhases: boolean;
   separateGenders: boolean;
+  separateTalent: boolean;
   finalistsCount: number;
   tieBreakingStrategy?: string;
 };
@@ -47,6 +49,7 @@ interface ScoresTabProps {
 export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJudgeLockToggle, eventId, currentPhase = "PRELIMINARY", event, onTieStatusChange, hasUnresolvedTies = false }: ScoresTabProps) {
   const [selectedViewPhase, setSelectedViewPhase] = useState<string>(currentPhase);
   const [finalistDialogOpen, setFinalistDialogOpen] = useState(false);
+  const [talentSheetOpen, setTalentSheetOpen] = useState(false);
   
   return (
     <div className="h-full flex flex-col">
@@ -62,6 +65,18 @@ export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJu
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Encode Talent Scores Button - only show when separateTalent is true */}
+            {event?.separateTalent && (
+              <TalentScoreSheet
+                eventId={eventId}
+                currentPhase={selectedViewPhase}
+                judges={judges}
+                event={event}
+                open={talentSheetOpen}
+                onOpenChange={setTalentSheetOpen}
+              />
+            )}
+            
             {/* Select Finalists Button - only show for manual selection in preliminary phase when there are unresolved ties */}
             {event?.hasTwoPhases && event?.tieBreakingStrategy === 'MANUAL_SELECTION' && event?.currentPhase === 'PRELIMINARY' && hasUnresolvedTies && (
               <Dialog open={finalistDialogOpen} onOpenChange={setFinalistDialogOpen}>

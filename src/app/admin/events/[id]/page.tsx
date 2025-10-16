@@ -39,6 +39,7 @@ type Event = {
   currentPhase: string;
   hasTwoPhases: boolean;
   separateGenders: boolean;
+  separateTalent: boolean;
   finalistsCount: number;
   tieBreakingStrategy?: string;
 };
