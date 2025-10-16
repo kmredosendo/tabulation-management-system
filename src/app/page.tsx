@@ -4,10 +4,10 @@ import React from 'react';
 import { useRouter } from "next/navigation";
 import { getApiUrl } from "@/lib/api";
 import { useActiveJudges } from "@/lib/useActiveJudges";
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Trophy, User } from "lucide-react";
 
 interface Event {
   id: number;
@@ -38,11 +38,11 @@ export default function Home() {
 		loadActiveEvents();
 	}, []);
 
-	const handleEventSelect = async (value: string) => {
-		setSelectedEventId(value);
+	const handleEventSelect = async (eventId: string) => {
+		setSelectedEventId(eventId);
 		setSelectedJudge(""); // Reset judge selection
-		if (value) {
-			const judgesRes = await fetch(getApiUrl(`/api/admin/judges?eventId=${value}`));
+		if (eventId) {
+			const judgesRes = await fetch(getApiUrl(`/api/admin/judges?eventId=${eventId}`));
 			const judgesData = await judgesRes.json();
 			setJudges(judgesData);
 		} else {
@@ -63,39 +63,58 @@ export default function Home() {
 
 	return (
 		<div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-background p-4">
-			<Card className="w-full max-w-xl mx-auto p-8 flex flex-col items-center gap-8 shadow-xl">
+			<Card className="w-full max-w-4xl mx-auto p-8 flex flex-col items-center gap-8 shadow-xl">
 				<h1 className="text-3xl sm:text-4xl font-bold text-center text-primary drop-shadow mb-2">
 					Tabulation System
 				</h1>
 				<div className="w-full flex flex-col items-center gap-4">
 					<div className="text-lg font-medium text-center mb-2">Select Event</div>
-					<Select value={selectedEventId} onValueChange={handleEventSelect} disabled={events.length === 0}>
-						<SelectTrigger className="w-64">
-							<SelectValue placeholder="Choose an event..." />
-						</SelectTrigger>
-						<SelectContent>
+					{events.length === 0 ? (
+						<div className="text-center text-muted-foreground py-8">No active events found.</div>
+					) : (
+						<div className="flex flex-wrap justify-center gap-4 w-full max-w-3xl">
 							{events.map((event) => (
-								<SelectItem key={event.id} value={event.id.toString()}>
-									{event.name}
-								</SelectItem>
+								<Card
+									key={event.id}
+									className={`transition-all border shadow-sm p-4 cursor-pointer hover:shadow-md w-80
+										${selectedEventId === event.id.toString() ? 'border-green-400 bg-green-50/60' : 'bg-background'}
+									`}
+									onClick={() => handleEventSelect(event.id.toString())}
+								>
+									<CardHeader className="p-0 gap-0">
+										<CardTitle className="flex items-center gap-2 text-lg font-semibold text-primary">
+											<Trophy className="w-5 h-5" />
+											<span>{event.name}</span>
+										</CardTitle>
+									</CardHeader>
+								</Card>
 							))}
-						</SelectContent>
-					</Select>
+						</div>
+					)}
 					{selectedEventId && (
 						<>
-							<div className="text-lg font-medium text-center mb-2">Select Judge</div>
-							<Select value={selectedJudge} onValueChange={handleJudgeSelect} disabled={judges.length === 0}>
-								<SelectTrigger className="w-64">
-									<SelectValue placeholder="Choose a judge..." />
-								</SelectTrigger>
-								<SelectContent>
+							<div className="text-lg font-medium text-center mb-4">Select Judge</div>
+							{judges.length === 0 ? (
+								<div className="text-center text-muted-foreground py-8">No judges found for this event.</div>
+							) : (
+								<div className="flex flex-wrap justify-center gap-4 w-full max-w-3xl">
 									{judges.map((judge) => (
-										<SelectItem key={judge.id} value={judge.id.toString()}>
-											Judge #{judge.number} - {judge.name}
-										</SelectItem>
+										<Card
+											key={judge.id}
+											className={`transition-all border shadow-sm p-4 cursor-pointer hover:shadow-md w-48
+												${selectedJudge === judge.id.toString() ? 'border-green-400 bg-green-50/60' : 'bg-background'}
+											`}
+											onClick={() => handleJudgeSelect(judge.id.toString())}
+										>
+											<CardHeader className="p-0 gap-0">
+												<CardTitle className="text-base font-semibold text-primary text-center">
+													{judge.name}
+												</CardTitle>
+											</CardHeader>
+										</Card>
 									))}
-								</SelectContent>
-							</Select>
+								</div>
+							)}
 						</>
 					)}
 				</div>
