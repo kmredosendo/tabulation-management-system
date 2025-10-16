@@ -194,6 +194,14 @@ export const FinalRankTable: React.FC<FinalRankTableProps> = ({ eventId, phase =
     femaleRankings = null;
   }
 
+  // Helper function to render ordinal rank
+  const getOrdinalRank = (rank: number): string => {
+    if (rank === 1) return "1st";
+    if (rank === 2) return "2nd";
+    if (rank === 3) return "3rd";
+    return `${rank}th`;
+  };
+
   // Helper function to render a ranking table
   const renderRankingTable = (rankingData: typeof rankings, title?: string) => (
     <div className="mb-6">
@@ -202,7 +210,7 @@ export const FinalRankTable: React.FC<FinalRankTableProps> = ({ eventId, phase =
         <table className="min-w-full border text-sm">
           <thead>
             <tr>
-              <th className="border px-2 py-1">No</th>
+              <th className="border px-2 py-1">No.</th>
               <th className="border px-2 py-1">Name</th>
               <th className="border px-2 py-1">Total Score</th>
               <th className="border px-2 py-1">Total Rank</th>
@@ -222,7 +230,7 @@ export const FinalRankTable: React.FC<FinalRankTableProps> = ({ eventId, phase =
                   <td className="border px-2 py-1">{row.contestant.name}</td>
                   <td className="border px-2 py-1 text-center font-bold">{row.totalScore.toFixed(2)}</td>
                   <td className="border px-2 py-1 text-center font-bold">{row.totalRank}</td>
-                  <td className="border px-2 py-1 text-center font-bold">{row.finalRank}</td>
+                  <td className="border px-2 py-1 text-center font-bold">{getOrdinalRank(row.finalRank!)}</td>
                 </tr>
               );
             })}

@@ -134,7 +134,7 @@ export const ContestantBreakdownTable: React.FC<ContestantBreakdownTableProps> =
   const renderBreakdownTable = (data: typeof contestantData, title?: string) => {
     if (!data) return null;
 
-    // Sort by contestant number ascending
+    // Sort by contestant number ascending (Contestant Rank should be sorted by number)
     data.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
 
     // Calculate ranks for each criteria
@@ -170,12 +170,19 @@ export const ContestantBreakdownTable: React.FC<ContestantBreakdownTableProps> =
           <table className="min-w-full border text-sm">
             <thead>
               <tr>
-                <th className="border px-2 py-1">Contestant #</th>
-                {mainCriteria.flatMap((criteria) => [
-                  <th key={`score-${criteria.id}`} className="border px-2 py-1 text-center">
+                <th className="border px-2 py-1" rowSpan={2}>No.</th>
+                {mainCriteria.map((criteria) => (
+                  <th key={`header-${criteria.id}`} className="border px-2 py-1 text-center" colSpan={2}>
                     {criteria.name}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {mainCriteria.flatMap((criteria) => [
+                  <th key={`score-header-${criteria.id}`} className="border px-2 py-1 text-center">
+                    Total Score
                   </th>,
-                  <th key={`rank-${criteria.id}`} className="border px-2 py-1 text-center">
+                  <th key={`rank-header-${criteria.id}`} className="border px-2 py-1 text-center">
                     Rank
                   </th>
                 ])}

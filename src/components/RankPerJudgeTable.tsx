@@ -43,6 +43,14 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [criteria, setCriteria] = useState<{ id: number; parentId?: number | null }[]>([]);
 
+  // Helper function to render ordinal rank
+  const getOrdinalRank = (rank: number): string => {
+    if (rank === 1) return "1st";
+    if (rank === 2) return "2nd";
+    if (rank === 3) return "3rd";
+    return `${rank}th`;
+  };
+
   useEffect(() => {
     const url = eventId ? `/api/raw-scores?eventId=${eventId}&phase=${phase}` : `/api/raw-scores?phase=${phase}`;
     fetch(getApiUrl(url))
@@ -194,10 +202,25 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
   const renderRankingTable = (rows: typeof contestantRows, title?: string) => {
     if (!rows) return null;
     
-    // Sort by contestant number ascending
-    rows.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+    // Sort by total rank ascending (by rank, not contestant number)
+    rows.sort((a, b) => a.totalRank - b.totalRank);
 
-    // Find the 1st, 2nd, and 3rd place totalRanks (handle ties)
+    // Calculate final rank for ALL contestants (handle ties)
+    const sortedByRank = [...rows].sort((a, b) => a.totalRank - b.totalRank);
+    const finalRankMap: Record<number, number> = {};
+    let prevTotal = null;
+    let prevRank = 1;
+    for (let i = 0; i < sortedByRank.length; i++) {
+      if (prevTotal !== null && sortedByRank[i].totalRank === prevTotal) {
+        finalRankMap[sortedByRank[i].id] = prevRank;
+      } else {
+        finalRankMap[sortedByRank[i].id] = i + 1;
+        prevRank = i + 1;
+      }
+      prevTotal = sortedByRank[i].totalRank;
+    }
+
+    // Find the 1st, 2nd, and 3rd place for highlighting
     const sortedRanks = Array.from(new Set(rows.map((row) => row.totalRank))).sort((a, b) => a - b);
     const first = sortedRanks[0];
     const second = sortedRanks[1];
@@ -210,7 +233,7 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
           <table className="min-w-full border text-sm">
             <thead>
               <tr>
-                <th className="border px-2 py-1">No</th>
+                <th className="border px-2 py-1">No.</th>
                 <th className="border px-2 py-1">Name</th>
                 {judges.map((judge) => (
                   <th key={judge.id} className="border px-2 py-1 text-center">
@@ -218,23 +241,20 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
                   </th>
                 ))}
                 <th className="border px-2 py-1">Total Rank</th>
-                <th className="border px-2 py-1">&nbsp;</th>
+                <th className="border px-2 py-1">Final Rank</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, idx) => {
                 let rowClass = "";
-                let place = "";
                 if (row.totalRank === first) {
                   rowClass = "bg-yellow-100 font-bold";
-                  place = "1st";
                 } else if (row.totalRank === second) {
                   rowClass = "bg-gray-200 font-semibold";
-                  place = "2nd";
                 } else if (row.totalRank === third) {
                   rowClass = "bg-orange-100 font-semibold";
-                  place = "3rd";
                 }
+                const finalRank = finalRankMap[row.id];
                 return (
                   <tr key={row.id} className={rowClass}>
                     <td className="border px-2 py-1 text-center">{row.number || idx + 1}</td>
@@ -243,7 +263,7 @@ export const RankPerJudgeTable: React.FC<RankPerJudgeTableProps> = ({ eventId, p
                       <td className="border px-2 py-1 text-center" key={i}>{typeof r === "number" ? r : ""}</td>
                     ))}
                     <td className="border px-2 py-1 text-center font-bold">{row.totalRank}</td>
-                    <td className="border px-2 py-1 text-center font-bold">{place}</td>
+                    <td className="border px-2 py-1 text-center font-bold">{getOrdinalRank(finalRank)}</td>
                   </tr>
                 );
               })}

@@ -3,6 +3,7 @@ import React from "react";
 interface Contestant {
   contestantId: number;
   contestantName: string;
+  contestantNumber?: number;
   contestantSex?: string;
   scores: Array<{ judgeId: number; judgeName: string; value: number }>;
 }
@@ -19,6 +20,14 @@ interface CategoryRankTableProps {
 }
 
 export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTableProps) {
+  // Helper function to render ordinal rank
+  const getOrdinalRank = (rank: number): string => {
+    if (rank === 1) return "1st";
+    if (rank === 2) return "2nd";
+    if (rank === 3) return "3rd";
+    return `${rank}th`;
+  };
+
   // Helper function to render ranking table for a group of contestants
   const renderRankingTable = (contestantGroup: typeof contestants, title?: string) => {
     if (contestantGroup.length === 0) return null;
@@ -27,11 +36,8 @@ export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTa
     const processed = contestantGroup.map(c => ({
       ...c,
       total: c.scores.reduce((sum, s) => sum + s.value, 0),
-      number: (() => {
-        const match = c.contestantName.match(/^#?(\d+)/);
-        return match ? Number(match[1]) : 0;
-      })()
-    })).sort((a, b) => a.number - b.number);
+      number: c.contestantNumber || 0
+    }));
 
     // Get all judgeIds in order of appearance (up to 5)
     const judgeIds: number[] = [];
@@ -97,6 +103,9 @@ export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTa
       prevTotal = sortedTotalRanks[i].total;
     }
 
+    // Sort processed by final rank (ascending)
+    processed.sort((a, b) => finalRankMap[a.contestantId] - finalRankMap[b.contestantId]);
+
     return (
       <div className="mb-4">
         {title && <h4 className="text-md font-semibold mb-2">{title}</h4>}
@@ -104,7 +113,7 @@ export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTa
           <table className="min-w-full border text-sm">
             <thead>
               <tr>
-                <th className="border px-2 py-1" rowSpan={2}>Contestant #</th>
+                <th className="border px-2 py-1" rowSpan={2}>No.</th>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <th className="border px-2 py-1 text-center" colSpan={2} key={`judge-header-${i}`}>{`Judge ${i + 1}`}</th>
                 ))}
@@ -119,7 +128,7 @@ export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTa
               </tr>
             </thead>
             <tbody>
-              {processed.map((c, idx) => {
+              {processed.map((c) => {
                 let rowClass = "";
                 const rank = finalRankMap[c.contestantId];
                 if (rank === 1) rowClass = "bg-yellow-100 font-bold";
@@ -127,7 +136,7 @@ export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTa
                 else if (rank === 3) rowClass = "bg-orange-100 font-semibold";
                 return (
                   <tr key={c.contestantId} className={rowClass}>
-                    <td className="border px-2 py-1 text-center">{c.number || idx + 1}</td>
+                    <td className="border px-2 py-1 text-center">{c.number}</td>
                   {judgeIds.map((judgeId, jIdx) => (
                     <React.Fragment key={`judge-${jIdx}`}>
                       <td className="border px-2 py-1 text-center">{(c.scores.find(s => s.judgeId === judgeId)?.value ?? 0)}</td>
@@ -142,7 +151,7 @@ export function CategoryRankTable({ contestants, eventSettings }: CategoryRankTa
                     </React.Fragment>
                   ))}
                   <td className="border px-2 py-1 text-center font-semibold">{totalRanks.find(t => t.contestantId === c.contestantId)?.total}</td>
-                  <td className="border px-2 py-1 text-center font-bold">{finalRankMap[c.contestantId]}</td>
+                  <td className="border px-2 py-1 text-center font-bold">{getOrdinalRank(finalRankMap[c.contestantId])}</td>
                 </tr>
                 );
               })}

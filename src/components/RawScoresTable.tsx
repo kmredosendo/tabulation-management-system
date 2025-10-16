@@ -125,7 +125,7 @@ export function RawScoresTable({ judgeId, eventId, tableClassName, phase }: { ju
         <thead>
           <tr>
             <th className="border-b-2 border-muted p-2 text-center align-bottom" rowSpan={2}>
-              Contestant #
+              No.
             </th>
             {mainGroups.map((main, mainIdx) => (
               <th
