@@ -452,11 +452,11 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-muted flex items-start justify-center py-10 px-2 sm:px-4 h-[90vh]">
+    <div className="min-h-screen bg-muted flex items-start justify-center p-2 sm:px-4 h-[90vh]">
       {/* Main Content */}
       <div className="w-full max-w-4xl h-full flex flex-col">
         <Card className="h-full min-h-0 flex flex-col">
-          <CardHeader className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10 border-b flex-shrink-0 flex justify-between items-center">
+          <CardHeader className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10 border-b flex-shrink-0 flex justify-between items-center gap-0">
             <div className="flex items-center justify-between w-full">
               <CardTitle className="flex items-center gap-2">
                 <Gauge className="w-5 h-5" /> Dashboard

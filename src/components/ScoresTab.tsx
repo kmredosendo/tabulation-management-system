@@ -56,10 +56,10 @@ export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJu
       <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-30 border-b flex-shrink-0 py-2 px-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold text-lg">
-            <ClipboardList className="w-5 h-5" />
-            Scores Overview
+            <ClipboardList className="w-5 h-5 hidden md:flex" />
+            <span className="hidden md:inline">Scores Overview</span>
             {event?.hasTwoPhases && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground hidden md:inline">
                  {selectedViewPhase === "PRELIMINARY" ? "Preliminary Round" : "Final Round"}
               </span>
             )}
@@ -142,7 +142,7 @@ export function ScoresTab({ judges, judgesLoading, activeJudges, onViewRaw, onJu
                     onCheckedChange={(checked) => onJudgeLockToggle(judge.id, checked, selectedViewPhase)}
                     className="mr-2"
                   />
-                  <span className="text-xs mr-4 w-16 text-center">
+                  <span className="text-xs mr-4 w-16 text-center hidden md:inline">
                     {selectedViewPhase === "PRELIMINARY" ? (judge.lockedPreliminary ? "Locked" : "Unlocked") : (judge.lockedFinal ? "Locked" : "Unlocked")}
                   </span>
 

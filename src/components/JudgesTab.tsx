@@ -148,8 +148,8 @@ export function JudgesTab({ event, judges, judgesLoading, onRefreshJudges, activ
       <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-30 border-b flex-shrink-0 py-2 px-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold text-lg">
-            <UserCheck className="w-5 h-5" />
-            Judges ({judges.length})
+            <UserCheck className="w-5 h-5 hidden md:flex" />
+            <span className="hidden md:inline">Judges ({judges.length})</span>
           </div>
           <Dialog open={addJudgeOpen} onOpenChange={(open) => {
             setAddJudgeOpen(open);

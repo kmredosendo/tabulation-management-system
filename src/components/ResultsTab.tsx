@@ -118,10 +118,10 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
       <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-30 border-b flex-shrink-0 py-2 px-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold text-lg">
-            <Medal className="w-5 h-5" />
-            Results Overview
+            <Medal className="w-5 h-5 hidden md:flex" />
+            <span className="hidden md:inline">Results Overview</span>
             {event?.hasTwoPhases && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground hidden md:inline">
                  {selectedViewPhase === "PRELIMINARY" ? "Preliminary Round" : "Final Round"}
               </span>
             )}

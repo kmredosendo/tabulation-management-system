@@ -170,8 +170,8 @@ export function ContestantsTab({ event }: ContestantsTabProps) {
       <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-30 border-b flex-shrink-0 py-2 px-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold text-lg">
-            <Users className="w-5 h-5" />
-            Contestants ({contestants.length})
+            <Users className="w-5 h-5 hidden md:flex" />
+            <span className="hidden md:inline">Contestants ({contestants.length})</span>
           </div>
           <Dialog open={addContestantOpen} onOpenChange={(open) => {
             setAddContestantOpen(open);
