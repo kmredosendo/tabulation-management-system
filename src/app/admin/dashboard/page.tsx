@@ -465,8 +465,8 @@ export default function AdminDashboard() {
                 <Sheet>
                   <SheetTrigger asChild>
                     <Button variant="outline">
-                      <Users className="w-4 h-4 mr-2" />
-                      Users
+                      <Users className="w-4 h-4" />
+                      <span className="hidden md:inline">Users</span>
                     </Button>
                   </SheetTrigger>
                   <SheetContent side="right" className="overflow-y-auto p-4">
@@ -746,7 +746,7 @@ export default function AdminDashboard() {
                 <Dialog open={open} onOpenChange={setOpen}>
                   <DialogTrigger asChild>
                     <Button variant="default">
-                      <Plus className="w-4 h-4 mr-2" /> New Event
+                      <Plus className="w-4 h-4" /> <span className="hidden md:inline">New Event</span>
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-md w-full">
@@ -902,7 +902,7 @@ export default function AdminDashboard() {
                         </div>
                         <div className="mt-0.5">
                           <span className="text-xs text-muted-foreground">
-                            {new Date(event.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                            {new Date(event.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} • {event.venue}
                           </span>
                         </div>
                         <div className="mt-1 flex items-center justify-between w-full">
