@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Tabulation System",
   description: "A web-based tabulation system for managing and scoring events, designed for event committees at JBLFMU.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

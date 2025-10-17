@@ -5,7 +5,7 @@ export function PrintHeader({ event }: { event: { name: string; date: string; in
     // <div className="w-full flex flex-col items-center mb-8 print:mb-4">
     <div className="w-full flex flex-col mb-8 print:mb-4">
       <div className="flex items-center gap-4">
-  <Image src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/favicon.png`} alt="Logo" width={72} height={72} className="rounded" />
+        <Image src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/favicon.ico`} alt="Logo" width={72} height={72} className="rounded" />
         {/* <div className="flex flex-col items-center"> */}
         <div className="flex flex-col">
           <span className="text-lg font-bold">{event?.institutionName || "Institution Name"}</span>
