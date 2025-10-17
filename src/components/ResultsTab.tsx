@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogTrigger, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { CategoryRankTable } from "@/components/CategoryRankTable";
 import { FinalRankTable } from "@/components/FinalRankTable";
@@ -166,37 +166,39 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
                           </Button>
                         </DialogTrigger>
                         {!!categoryDialogs[cat.identifier] && (
-                          <DialogContent className="max-w-7xl w-[75vw]" style={{ maxWidth: '75vw', width: '75vw' }}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Icon className={`w-5 h-5 ${iconInfo.color}`} />
-                              <DialogTitle>{cat.name}</DialogTitle>
-                            </div>
-                            {categoryLoading[cat.identifier] ? (
-                              <div className="py-4 text-center text-muted-foreground">Loading...</div>
-                            ) : categoryError[cat.identifier] ? (
-                              <div className="py-4 text-center text-destructive">{categoryError[cat.identifier]}</div>
-                            ) : categoryData[cat.identifier] && categoryData[cat.identifier]?.contestants?.length ? (
-                              <>
+                          <DialogContent className="w-[95vw] max-w-none sm:max-w-4xl max-h-[90vh] flex flex-col">
+                            <DialogHeader className="flex-shrink-0 sticky top-0 bg-background border-b pb-4">
+                              <div className="flex items-center gap-2">
+                                <Icon className={`w-5 h-5 ${iconInfo.color}`} />
+                                <DialogTitle>{cat.name}</DialogTitle>
+                              </div>
+                            </DialogHeader>
+                            <div className="flex-1 overflow-y-auto py-4">
+                              {categoryLoading[cat.identifier] ? (
+                                <div className="py-4 text-center text-muted-foreground">Loading...</div>
+                              ) : categoryError[cat.identifier] ? (
+                                <div className="py-4 text-center text-destructive">{categoryError[cat.identifier]}</div>
+                              ) : categoryData[cat.identifier] && categoryData[cat.identifier]?.contestants?.length ? (
                                 <CategoryRankTable contestants={categoryData[cat.identifier]!.contestants} eventSettings={event} />
-                                <div className="flex justify-end mt-4">
-                                  <Button
-                                    onClick={() => {
-                                      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-                                      const url = event?.hasTwoPhases 
-                                        ? `${basePath}/admin/events/${Array.isArray(eventId) ? eventId[0] : eventId}/results/print/category/${cat.identifier}?phase=${selectedViewPhase}`
-                                        : `${basePath}/admin/events/${Array.isArray(eventId) ? eventId[0] : eventId}/results/print/category/${cat.identifier}`;
-                                      window.open(url, '_blank');
-                                    }}
-                                    aria-label="Print"
-                                    title={`Print ${cat.name} Results`}
-                                  >
-                                    <Printer className="mr-2" /> Print
-                                  </Button>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="py-4 text-center text-muted-foreground">No scores found.</div>
-                            )}
+                              ) : (
+                                <div className="py-4 text-center text-muted-foreground">No scores found.</div>
+                              )}
+                            </div>
+                            <DialogFooter>
+                              <Button
+                                onClick={() => {
+                                  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+                                  const url = event?.hasTwoPhases 
+                                    ? `${basePath}/admin/events/${Array.isArray(eventId) ? eventId[0] : eventId}/results/print/category/${cat.identifier}?phase=${selectedViewPhase}`
+                                    : `${basePath}/admin/events/${Array.isArray(eventId) ? eventId[0] : eventId}/results/print/category/${cat.identifier}`;
+                                  window.open(url, '_blank');
+                                }}
+                                aria-label="Print"
+                                title={`Print ${cat.name} Results`}
+                              >
+                                <Printer className="mr-2" /> Print
+                              </Button>
+                            </DialogFooter>
                           </DialogContent>
                         )}
                       </Dialog>
@@ -235,15 +237,18 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
                       </Button>
                     </DialogTrigger>
                     <DialogContent
-                      className="max-w-7xl w-[75vw]"
-                      style={{ maxWidth: '75vw', width: '75vw' }}
+                      className="w-[95vw] max-w-none sm:max-w-4xl max-h-[90vh] flex flex-col"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <UserCheck className="w-5 h-5 text-green-500" />
-                        <DialogTitle>Rank per Judge</DialogTitle>
+                      <DialogHeader className="flex-shrink-0 sticky top-0 bg-background border-b pb-4">
+                        <div className="flex items-center gap-2">
+                          <UserCheck className="w-5 h-5 text-green-500" />
+                          <DialogTitle>Rank per Judge</DialogTitle>
+                        </div>
+                      </DialogHeader>
+                      <div className="flex-1 overflow-y-auto py-4">
+                        <RankPerJudgeTable eventId={parseInt(Array.isArray(eventId) ? eventId[0] : eventId!)} phase={selectedViewPhase} eventSettings={event} />
                       </div>
-                      <RankPerJudgeTable eventId={parseInt(Array.isArray(eventId) ? eventId[0] : eventId!)} phase={selectedViewPhase} eventSettings={event} />
-                      <div className="flex justify-end mt-4">
+                      <DialogFooter>
                         <Button
                           onClick={() => {
                             const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -257,7 +262,7 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
                         >
                           <Printer className="mr-2" /> Print
                         </Button>
-                      </div>
+                      </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   <Button
@@ -293,14 +298,17 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
                       </Button>
                     </DialogTrigger>
                     <DialogContent
-                      className="max-w-7xl w-[75vw]"
-                      style={{ maxWidth: '75vw', width: '75vw' }}
+                      className="w-[95vw] max-w-none sm:max-w-4xl max-h-[90vh] flex flex-col"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <User className="w-5 h-5 text-pink-500" />
-                        <DialogTitle>Contestant Rank</DialogTitle>
+                      <DialogHeader className="flex-shrink-0 sticky top-0 bg-background border-b pb-4">
+                        <div className="flex items-center gap-2">
+                          <User className="w-5 h-5 text-pink-500" />
+                          <DialogTitle>Contestant Rank</DialogTitle>
+                        </div>
+                      </DialogHeader>
+                      <div className="flex-1 overflow-y-auto py-4">
+                        <ContestantBreakdownTable eventId={parseInt(Array.isArray(eventId) ? eventId[0] : eventId!)} phase={selectedViewPhase} eventSettings={event} />
                       </div>
-                      <ContestantBreakdownTable eventId={parseInt(Array.isArray(eventId) ? eventId[0] : eventId!)} phase={selectedViewPhase} eventSettings={event} />
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -316,20 +324,23 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
                 <div className="flex gap-1">
                   <Dialog open={finalRankDialog} onOpenChange={setFinalRankDialog}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="icon" aria-label="View" title={`View ${event?.hasTwoPhases ? (selectedViewPhase === "PRELIMINARY" ? "Preliminary" : "Final") : "Final"} Rank`}>
+                      <Button variant="outline" size="icon" aria-label="View" title="View Final Rank">
                         <Eye />
                       </Button>
                     </DialogTrigger>
                     <DialogContent
-                      className="max-w-7xl w-[75vw]"
-                      style={{ maxWidth: '75vw', width: '75vw' }}
+                      className="w-[95vw] max-w-none sm:max-w-4xl max-h-[90vh] flex flex-col"
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <Crown className={`w-5 h-5 ${selectedViewPhase === "PRELIMINARY" ? "text-yellow-500" : "text-red-500"}`} />
-                        <DialogTitle>{event?.hasTwoPhases ? (selectedViewPhase === "PRELIMINARY" ? "Preliminary" : "Final") : "Final"} Rank</DialogTitle>
+                      <DialogHeader className="flex-shrink-0 sticky top-0 bg-background border-b pb-4">
+                        <div className="flex items-center gap-2">
+                          <Crown className={`w-5 h-5 ${selectedViewPhase === "PRELIMINARY" ? "text-yellow-500" : "text-red-500"}`} />
+                          <DialogTitle>{event?.hasTwoPhases ? (selectedViewPhase === "PRELIMINARY" ? "Preliminary" : "Final") : "Final"} Rank</DialogTitle>
+                        </div>
+                      </DialogHeader>
+                      <div className="flex-1 overflow-y-auto py-4">
+                        <FinalRankTable eventId={parseInt(Array.isArray(eventId) ? eventId[0] : eventId!)} phase={selectedViewPhase} eventSettings={event} />
                       </div>
-                      <FinalRankTable eventId={parseInt(Array.isArray(eventId) ? eventId[0] : eventId!)} phase={selectedViewPhase} eventSettings={event} />
-                      <div className="flex justify-end mt-4">
+                      <DialogFooter>
                         <Button
                           onClick={() => {
                             const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -343,7 +354,7 @@ export function ResultsTab({ categories, categoriesLoading, eventId, event }: Re
                         >
                           <Printer className="mr-2" /> Print
                         </Button>
-                      </div>
+                      </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   <Button
