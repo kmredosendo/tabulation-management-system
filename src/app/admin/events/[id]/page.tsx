@@ -363,15 +363,15 @@ export default function EventDetailsPage() {
       <div className="w-full max-w-4xl h-full flex flex-col">
         <Card className="h-full min-h-0 flex flex-col overflow-hidden gap-2">
           <CardHeader className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10 border-b flex-shrink-0 gap-0">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-2">
               <div className="flex gap-2">
                 <Link href="/admin/dashboard">
                   <Button variant="outline" size="sm">
                     <ArrowLeft className="w-4 h-4" />
                   </Button>
                 </Link>
-                <div className="flex items-start gap-2">
-                  <Trophy className="w-6 h-6 mt-0.5 flex-shrink-0" />
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-6 h-6 flex-shrink-0" />
                   <div className="flex flex-col gap-1">
                     <CardTitle className="text-left">
                       {event.name}
