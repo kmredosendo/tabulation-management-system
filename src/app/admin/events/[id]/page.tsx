@@ -376,7 +376,7 @@ export default function EventDetailsPage() {
                     <CardTitle className="text-left">
                       {event.name}
                     </CardTitle>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground hidden md:block">
                       {new Date(event.date).toLocaleDateString()} • {event.venue}
                     </div>
                   </div>
@@ -386,7 +386,7 @@ export default function EventDetailsPage() {
                 {event.hasTwoPhases && (
                   <div className="flex flex-col items-end gap-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Contest Phase:</span>
+                      <span className="text-sm font-medium hidden md:inline">Contest Phase:</span>
                       <Select 
                         value={event.currentPhase} 
                         onValueChange={(value) => {
@@ -420,7 +420,8 @@ export default function EventDetailsPage() {
           <CardContent className="flex-1 flex flex-col min-h-0">
             {/* Tabs for different sections - Sticky */}
             <Tabs defaultValue="contestants" className="w-full flex-1 flex flex-col min-h-0">
-              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-20">
+            <div className="overflow-x-auto sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-20">
+              <TabsList className="flex w-max min-w-full gap-1 px-1">
                 <TabsTrigger value="contestants" className="flex items-center gap-2">
                   <Users className="w-4 h-4" />
                   Contestants
@@ -452,6 +453,7 @@ export default function EventDetailsPage() {
                   Results
                 </TabsTrigger>
               </TabsList>
+            </div>
 
               <div className="flex-1 min-h-0">
                 {/* Contestants Tab */}

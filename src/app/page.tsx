@@ -4,10 +4,10 @@ import React from 'react';
 import { useRouter } from "next/navigation";
 import { getApiUrl } from "@/lib/api";
 import { useActiveJudges } from "@/lib/useActiveJudges";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trophy, User } from "lucide-react";
+import { Trophy } from "lucide-react";
 
 interface Event {
   id: number;
