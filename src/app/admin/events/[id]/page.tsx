@@ -7,7 +7,7 @@ import "./judge-indicator.css";
 import { useActiveJudges } from "@/lib/useActiveJudges";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Toaster } from "sonner";
@@ -501,19 +501,16 @@ export default function EventDetailsPage() {
 
             <Dialog open={rawDialogOpen} onOpenChange={setRawDialogOpen}>
               <DialogContent
-                className="max-w-7xl w-[75vw] p-0"
-                style={{ maxWidth: '75vw', width: '75vw' }}
+                className="w-[95vw] max-w-none sm:max-w-4xl max-h-[90vh] flex flex-col"
               >
-                <DialogHeader className="px-8 pt-8 pb-2">
+                <DialogHeader className="flex-shrink-0 sticky top-0 bg-background border-b pb-4">
                   <DialogTitle className="text-lg">
                     Raw Scores for Judge {selectedJudge?.number} - {selectedJudge?.name} ({selectedPhase === "PRELIMINARY" ? "Preliminary Round" : "Final Round"})
                   </DialogTitle>
                 </DialogHeader>
                 {selectedJudge && (
-                  <div className="relative p-8 pt-2 overflow-auto print:p-0 print:pt-0" style={{ maxHeight: '80vh' }}>
-                    <div>
-                      <RawScoresTable judgeId={selectedJudge.id} eventId={parseInt(Array.isArray(id) ? id[0] : id!)} phase={selectedPhase} />
-                    </div>
+                  <div className="flex-1 overflow-y-auto py-4">
+                    <RawScoresTable judgeId={selectedJudge.id} eventId={parseInt(Array.isArray(id) ? id[0] : id!)} phase={selectedPhase} />
                   </div>
                 )}
               </DialogContent>
